@@ -1,5 +1,10 @@
 #! /bin/bash
-# Opalstack Wordpress installer.
+# Opalstack Boilerplate installer.
+# Takes token and app info, creates a MySQL DB and DBUSER and provies the info as vars.
+# Order of operations best practice, 
+# First external downloads. Tarballs, zips, archives, external libraries.
+# Second api calls to Opalstack control, DB creation, Port creation, etc. 
+# Last logic to create the application. Shell commands to build and install.
 
 CRED2='\033[1;91m'        # Red
 CGREEN2='\033[1;92m'      # Green
@@ -126,10 +131,4 @@ else
     fi;
     done
 
-    # curl -O https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar
-    # Path to your WordPress installs
-    # SITE_PATH="/home/$USER/apps/"  # need to add app path TODO
-
 fi;
-
-
