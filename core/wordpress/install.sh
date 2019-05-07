@@ -35,22 +35,24 @@ else
     # last is the logic to create the application. 
     # autoadd DB, return its JSON user/pass as vars 
 
+    # TODO Check if app installed_ok
+    
     # Get the server's UUID and verify the app exists, and thus the file schema exists.
     if serverjson=`curl -s --fail --header "Content-Type:application/json" --header "Authorization: Token $TOKEN"  http://127.0.0.1:8000/api/v0/app/read/$UUID` ;then
          printf $CGREEN2
-         echo 'UUID validation, server lookup OK.'
+         echo 'UUID validation and server lookup OK.'
          printf $CEND
-         serverid=`echo $serverjson | jq .server`
+         serverid=`echo $serverjson | jq -r .server`
     else
          printf $CRED2
-         echo 'UUID validation, server lookup failed.'
-         sexit 1
+         echo 'UUID validation and server lookup failed.'
+         exit 1
     fi;
     
     # create database
-    dbsend='{"name": "'"$APPNAME"'", "server": '$serverid' }'
+    dbsend='{"name": "'"$APPNAME"'", "server": "'"$serverid"'" }'
     if dbjson=`curl -s --fail --header "Content-Type:application/json" --header "Authorization: Token $TOKEN" -d"$dbsend"  http://127.0.0.1:8000/api/v0/mariadb/autoadd/` ;then
-         export $(echo $dbjson| jq -r '@sh "DBNAME=\(.name) CHARSET=\(.charset) DBUSER=\(.dbuser) DBPWD=\(.default_password) SERVER=\(.server)"')
+         export $(echo $dbjson| jq -r '@sh "DBNAME=\(.name) CHARSET=\(.charset) DBID=\(.id) DBUSERID=\(.dbuserid) DBUSER=\(.dbuser) DBPWD=\(.default_password) SERVER=\(.server)"' )
          printf $CGREEN2
          echo 'DB creation OK.'
          printf $CEND
@@ -59,8 +61,76 @@ else
          echo 'DB creation failed.'
          exit 1
     fi;
+    eval DBNAME=$DBNAME
+    eval DBUSERID=$DBUSERID
+    eval DBID=$DBID
+    eval DBUSER=$DBUSER
+    eval DBPWD=$DBPWD
+    echo "Database Created"
     echo $DBNAME
+    echo $DBUSER
+    echo $DBPWD
 
+    echo"waiting for 30 seconds so the DB and DBUser can be created"
+    sleep 30
+    
+    # check if the DB has been installed, initial request. ------------------------------------------------------------------------------------------------------------
+    if DBOKJSON=`curl -s --fail --header "Content-Type:application/json" --header "Authorization: Token $TOKEN"  http://127.0.0.1:8000/api/v0/mariadb/read/$DBID` ;then
+         printf $CGREEN2
+         echo 'DB OK lookup.'
+         printf $CEND
+         DBOK=`echo $DBOKJSON | jq -r .installed_ok`
+    else
+         printf $CRED2
+         echo 'DB OK lookup.'
+         exit 1
+    fi;
+    
+    # Iterate until DBOK True
+    while [ $DBOK  == "False" ]
+    do
+    echo $DBOK
+
+    sleep 10
+    if DBOKJSON=`curl -s --fail --header "Content-Type:application/json" --header "Authorization: Token $TOKEN"  http://127.0.0.1:8000/api/v0/mariadb/read/$DBID` ;then
+         printf $CGREEN2
+         echo 'DB OK lookup.'
+         printf $CEND
+         DBOK=`echo $DBOKJSON | jq -r .installed_ok`
+    else
+         printf $CRED2
+         echo 'DB OK lookup.'
+    fi;
+    done
+    
+    # check if the DB USER has been installed, initial request. ------------------------------------------------------------------------------------------------------------
+    if DBUOKJSON=`curl -s --fail --header "Content-Type:application/json" --header "Authorization: Token $TOKEN"  http://127.0.0.1:8000/api/v0/mariauser/read/$DBUSERID` ;then
+         printf $CGREEN2
+         echo 'DBUser OK lookup.'
+         printf $CEND
+         DBUOK=`echo $DBUOKJSON | jq -r .installed_ok`
+    else
+         printf $CRED2
+         echo 'DBUser OK lookup.'
+         exit 1
+    fi;
+    
+    # Iterate until DBUOK True
+    while [ $DBUOK  == "False" ]
+    do
+    echo $DBUOK
+
+    sleep 10
+    if DBUOKJSON=`curl -s --fail --header "Content-Type:application/json" --header "Authorization: Token $TOKEN"  http://127.0.0.1:8000/api/v0/mariauser/read/$DBUSERID` ;then
+         printf $CGREEN2
+         echo 'DBUser OK lookup.'
+         printf $CEND
+         DBUOK=`echo $DBUOKJSON | jq -r .installed_ok`
+    else
+         printf $CRED2
+         echo 'DBUser OK lookup.'
+    fi;
+    done
 
 fi;
 
