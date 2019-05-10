@@ -20,10 +20,6 @@ n) APPNAME=$OPTARG;;
 esac
 done
 
-echo $OPAL_TOKEN
-echo $UUID
-echo $APPNAME
-
 if [ -z $UUID ] || [ -z $OPAL_TOKEN ] || [ -z $APPNAME ]
 then
      printf $CRED2
