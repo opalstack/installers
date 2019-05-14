@@ -1,5 +1,10 @@
 #! /bin/bash
 # Opalstack Wordpress installer.
+# Takes token and app info, creates a MySQL DB and DBUSER and provies the info as vars.
+# Order of operations best practice, 
+# First external downloads. Tarballs, zips, archives, external libraries.
+# Second api calls to Opalstack control, DB creation, Port creation, etc. 
+# Last logic to create the application. Shell commands to build and install.
 
 CRED2='\033[1;91m'        # Red
 CGREEN2='\033[1;92m'      # Green
@@ -19,6 +24,9 @@ i) UUID=${OPTARG};;
 n) APPNAME=$OPTARG;;
 esac
 done
+
+printf '%(%F %T)T\n' >> /home/$USER/logs/$APPNAME/install.log
+
 
 if [ -z $UUID ] || [ -z $OPAL_TOKEN ] || [ -z $APPNAME ]
 then
@@ -67,7 +75,7 @@ else
     echo "waiting for 30 seconds so the DB and DBUser can be created"
     sleep 30
     
-    # check if the DB has been installed, initial request. ------------------------------------------------------------------------------------------------------------
+    # check if the DB has been installed, initial request. 
     if DBOKJSON=`curl -s --fail --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN"  https://my.opalstack.com/api/v0/mariadb/read/$DBID` ;then
          printf $CGREEN2
          echo 'DB OK lookup.'
@@ -96,7 +104,7 @@ else
     fi;
     done
     
-    # check if the DB USER has been installed, initial request. ------------------------------------------------------------------------------------------------------------
+    # check if the DB USER has been installed, initial request. 
     if DBUOKJSON=`curl -s --fail --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN"  https://my.opalstack.com/api/v0/mariauser/read/$DBUSERID` ;then
          printf $CGREEN2
          echo 'DBUser OK lookup.'
@@ -125,17 +133,21 @@ else
     fi;
     done
 
+    # Install wp-cli
+    echo 'WP CLI init'
     /bin/mkdir -p $HOME/bin/
     /bin/wget https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar -O $HOME/bin/wp
     /bin/chmod +x $HOME/bin/wp
-    /$HOME/bin/wp cli update
-    cd $HOME/apps/$APPNAME/
+    
+    # use wp-cli to install wordpress, 
+    $HOME/bin/wp cli update
     $HOME/bin/wp core download
-    $HOME/wp core config --dbhost=localhost --dbname=$DBNAME --dbuser=$DBUSER --dbpass=$DBPWD
-    chmod 644 wp-config.php
+    $HOME/bin/wp core config --dbhost=localhost --dbname=$DBNAME --dbuser=$DBUSER --dbpass=$DBPWD
+    /usr/bin/chmod 644 wp-config.php
     
     #$HOME/wp core install --url=yourwebsite.com --title="Your Blog Title" --admin_name=wordpress_admin --admin_password=4Long&Strong1 --admin_email=you@example.com
-
+    # if the above works without fail, send JSON installed OK.
+    
 fi;
 
 
