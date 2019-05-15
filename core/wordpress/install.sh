@@ -25,7 +25,7 @@ n) APPNAME=$OPTARG;;
 esac
 done
 
-printf '%(%F %T)T\n' >> /home/$USER/logs/$APPNAME/install.log
+printf 'Started at %(%F %T)T\n' >> /home/$USER/logs/$APPNAME/install.log
 
 
 if [ -z $UUID ] || [ -z $OPAL_TOKEN ] || [ -z $APPNAME ]
@@ -49,7 +49,20 @@ else
          echo 'UUID validation and server lookup failed.'
          exit 1
     fi;
-    
+
+    # Get the the account email address for wp install. 
+    if accountjson=`curl -s --fail --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN"  https://my.opalstack.com/api/v0/account/info/` ;then
+         printf $CGREEN2
+         echo 'Admin email lookup OK.'
+         printf $CEND
+         accountemail=`echo $accountjson | jq -r .email`
+    else
+         printf $CRED2
+         echo 'Admin email lookup failed.'
+         exit 1
+    fi;
+
+
     # create database
     dbsend='{"name": "'"$APPNAME"'", "server": "'"$serverid"'" }'
     if dbjson=`curl -s --fail --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN" -d"$dbsend"  https://my.opalstack.com/api/v0/mariadb/autoadd/` ;then
@@ -70,20 +83,19 @@ else
     echo "Database Created"
     echo $DBNAME
     echo $DBUSER
-    echo $DBPWD
 
-    echo "waiting for 30 seconds so the DB and DBUser can be created"
-    sleep 30
+    echo "waiting for 20 seconds so the DB and DBUser can be created"
+    sleep 20
     
     # check if the DB has been installed, initial request. 
     if DBOKJSON=`curl -s --fail --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN"  https://my.opalstack.com/api/v0/mariadb/read/$DBID` ;then
-         printf $CGREEN2
-         echo 'DB OK lookup.'
+         printf $CYELLOW2
+         echo 'DB lookup.'
          printf $CEND
          DBOK=`echo $DBOKJSON | jq -r .installed_ok`
     else
          printf $CRED2
-         echo 'DB OK lookup.'
+         echo 'DB lookup failed.'
          exit 1
     fi;
     
@@ -92,27 +104,31 @@ else
     do
     echo $DBOK
 
-    sleep 10
+    sleep 5
     if DBOKJSON=`curl -s --fail --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN"  https://my.opalstack.com/api/v0/mariadb/read/$DBID` ;then
-         printf $CGREEN2
-         echo 'DB OK lookup.'
+         printf $CYELLOW2
+         echo 'DB lookup.'
          printf $CEND
          DBOK=`echo $DBOKJSON | jq -r .installed_ok`
     else
          printf $CRED2
-         echo 'DB OK lookup.'
+         echo 'DB lookup failed.'
     fi;
     done
     
+    printf $CGREEN2
+    echo 'DB lookup OK.'
+    printf $CEND
+    
     # check if the DB USER has been installed, initial request. 
     if DBUOKJSON=`curl -s --fail --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN"  https://my.opalstack.com/api/v0/mariauser/read/$DBUSERID` ;then
-         printf $CGREEN2
-         echo 'DBUser OK lookup.'
+         printf $CYELLOW2
+         echo 'DB User lookup.'
          printf $CEND
          DBUOK=`echo $DBUOKJSON | jq -r .installed_ok`
     else
          printf $CRED2
-         echo 'DBUser OK lookup.'
+         echo 'DB User lookup failed.'
          exit 1
     fi;
     
@@ -121,33 +137,37 @@ else
     do
     echo $DBUOK
 
-    sleep 10
+    sleep 5
     if DBUOKJSON=`curl -s --fail --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN"  https://my.opalstack.com/api/v0/mariauser/read/$DBUSERID` ;then
-         printf $CGREEN2
-         echo 'DBUser OK lookup.'
+         printf $CYELLOW2
+         echo 'DB User lookup.'
          printf $CEND
          DBUOK=`echo $DBUOKJSON | jq -r .installed_ok`
     else
          printf $CRED2
-         echo 'DBUser OK lookup.'
+         echo 'DB User lookup failed.'
     fi;
     done
+
+    printf $CGREEN2
+    echo 'DB User lookup OK.'
+    printf $CEND
 
     # Install wp-cli
     echo 'WP CLI init'
     /bin/mkdir -p $HOME/bin/
     /bin/wget https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar -O $HOME/bin/wp
     /bin/chmod +x $HOME/bin/wp
-    
+
     # use wp-cli to install wordpress, 
     $HOME/bin/wp cli update
-    $HOME/bin/wp core download
-    $HOME/bin/wp core config --dbhost=localhost --dbname=$DBNAME --dbuser=$DBUSER --dbpass=$DBPWD
+    $HOME/bin/wp core download --path=/home/$USER/apps/$APPNAME
+    $HOME/bin/wp core config --dbhost=localhost --dbname=$DBNAME --dbuser=$DBUSER --dbpass=$DBPWD --path=/home/$USER/apps/$APPNAME
     /usr/bin/chmod 644 wp-config.php
-    
-    #$HOME/wp core install --url=yourwebsite.com --title="Your Blog Title" --admin_name=wordpress_admin --admin_password=4Long&Strong1 --admin_email=you@example.com
-    # if the above works without fail, send JSON installed OK.
+    $HOME/bin/wp core install --admin_name=$USER --admin_email=$accountemail --url="_" --title="Wordpress Blog" --path=/home/$USER/apps/$APPNAME
+
+    # Send JSON installed OK.
+    appok='{"id": "'"$UUID"'", "installed_ok":"True" }'
+    /usr/bin/curl -s -X POST --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN" -d"$appok" https://my.opalstack.com/api/v0/app/installed_ok/
     
 fi;
-
-
