@@ -153,6 +153,9 @@ else
     echo 'DB User lookup OK.'
     printf $CEND
 
+    # have to do this to be sure the DBs have permissions, which can take 60 seconds after db creation.
+    sleep 65
+    
     # Install wp-cli
     echo 'WP CLI init'
     /bin/mkdir -p $HOME/bin/
