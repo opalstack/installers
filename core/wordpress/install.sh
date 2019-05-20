@@ -27,7 +27,6 @@ done
 
 printf 'Started at %(%F %T)T\n' >> /home/$USER/logs/$APPNAME/install.log
 
-
 if [ -z $UUID ] || [ -z $OPAL_TOKEN ] || [ -z $APPNAME ]
 then
      printf $CRED2

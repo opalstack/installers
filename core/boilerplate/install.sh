@@ -11,17 +11,18 @@ CWHITE2='\033[1;97m'      # White
 CEND='\033[0m'       # Text Reset
 
 # i is for UUID, t is for user token, n is for app name
-while getopts i:t:l:n: option
+while getopts i:n: option
 do
 case "${option}"
 in
 i) UUID=${OPTARG};;
-t) TOKEN=${OPTARG};;
 n) APPNAME=$OPTARG;;
 esac
 done
 
-if [ -z $UUID ] || [ -z $TOKEN ] || [ -z $APPNAME ]
+printf 'Started at %(%F %T)T\n' >> /home/$USER/logs/$APPNAME/install.log
+
+if [ -z $UUID ] || [ -z $OPAL_TOKEN ] || [ -z $APPNAME ]
 then
      printf $CRED2
      echo 'This command requires the following parameters to function, 
@@ -32,7 +33,7 @@ then
      exit 1
 else    
     # Get the server's UUID and verify the app exists, and thus the file schema exists.
-    if serverjson=`curl -s --fail --header "Content-Type:application/json" --header "Authorization: Token $TOKEN"  http://127.0.0.1:8000/api/v0/app/read/$UUID` ;then
+    if serverjson=`curl -s --fail --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN"  https://my.opalstack.com/api/v0/app/read/$UUID` ;then
          printf $CGREEN2
          echo 'UUID validation and server lookup OK.'
          printf $CEND
