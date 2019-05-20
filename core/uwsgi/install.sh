@@ -91,7 +91,7 @@ chmod +x /home/$USER/apps/$APPNAME/keepalive
 chmod +x /home/$USER/apps/$APPNAME/kill
 
 cline="*/1 * * * * /home/$USER/apps/$APPNAME/keepalive"
-(crontab -u $USER -l; echo "$cline" ) | crontab -u $USER -
+(crontab -l; echo "$cline" ) | crontab -
 
 # add installed OK
 appok='{"id": "'"$UUID"'", "installed_ok":"True" }'
