@@ -93,3 +93,4 @@ b3RlIHtteWFwcF93c2dpX3BhdGh9JykK" | base64 --decode > /home/$USER/ossrc/$APPNAME
 chmod +x /home/$USER/apps/$APPNAME/keepalive
 chmod +x /home/$USER/apps/$APPNAME/kill
 
+echo "$(echo '*/1 * * * * /home/$USER/apps/$APPNAME/keepalive' ; crontab -l)" | crontab -
