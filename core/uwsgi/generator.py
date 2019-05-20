@@ -1,7 +1,7 @@
 import os
 user = os.getenv('USER')
-port = os.getenv('APPNAME')
-name = os.getenv('PORT')
+name = os.getenv('APPNAME')
+port = os.getenv('PORT')
 keepalive_path = f'/home/{user}/apps/{name}/keepalive'
 keepalive = f'''#!/bin/bash
 mkdir -p "$HOME/tmp"
