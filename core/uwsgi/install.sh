@@ -90,4 +90,7 @@ b3NlCnByaW50KGYnV3JvdGUge215YXBwX3dzZ2lfcGF0aH0nKQo=" | base64 --decode > /home/
 chmod +x /home/$USER/apps/$APPNAME/keepalive
 chmod +x /home/$USER/apps/$APPNAME/kill
 
-echo "$(echo '*/1 * * * * /home/'$USER/apps/'$APPNAME'/keepalive' ; crontab -l)" | crontab -
+line="*/1 * * * * /home/$USER/apps/$APPNAME/keepalive"
+(crontab -u $USER -l; echo "$line" ) | crontab -u $USER -
+
+# add installed OK
