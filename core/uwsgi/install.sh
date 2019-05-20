@@ -90,7 +90,10 @@ b3NlCnByaW50KGYnV3JvdGUge215YXBwX3dzZ2lfcGF0aH0nKQo=" | base64 --decode > /home/
 chmod +x /home/$USER/apps/$APPNAME/keepalive
 chmod +x /home/$USER/apps/$APPNAME/kill
 
-line="*/1 * * * * /home/$USER/apps/$APPNAME/keepalive"
-(crontab -u $USER -l; echo "$line" ) | crontab -u $USER -
+cline="*/1 * * * * /home/$USER/apps/$APPNAME/keepalive"
+(crontab -u $USER -l; echo "$cline" ) | crontab -u $USER -
 
 # add installed OK
+appok='{"id": "'"$UUID"'", "installed_ok":"True" }'
+/usr/bin/curl -s -X POST --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN" -d"$appok" https://my.opalstack.com/api/v0/app/installed_ok/
+    
