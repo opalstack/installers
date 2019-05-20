@@ -88,7 +88,7 @@ b25zZSk6CiAgICBzdGFydF9yZXNwb25zZSgnMjAwIE9LJywgWygnQ29udGVudC1UeXBlJywndGV4
 dC9odG1sJyldKQogICAgcmV0dXJuIFtiJ0hlbGxvIFdvcmxkISddCicnJwpmID0gb3BlbihteWFw
 cF93c2dpX3BhdGgsICd3KycpCmYud3JpdGUobXlhcHBfd3NnaSkKZi5jbG9zZQpwcmludChmJ1dy
 b3RlIHtteWFwcF93c2dpX3BhdGh9JykK" | base64 --decode > /home/$USER/ossrc/$APPNAME-generator.py
-/usr/bin/python3.6 /home/$USER/ossrc/$APPNAME-generator.py -n $APPNAME -p $PORT
+/usr/bin/python3.6 /home/$USER/ossrc/$APPNAME-generator.py 
 
 chmod +x /home/$USER/apps/$APPNAME/keepalive
 chmod +x /home/$USER/apps/$APPNAME/kill
