@@ -166,10 +166,10 @@ else
     $HOME/bin/wp core download --path=/home/$USER/apps/$APPNAME
     $HOME/bin/wp core config --dbhost=localhost --dbname=$DBNAME --dbuser=$DBUSER --dbpass=$DBPWD --path=/home/$USER/apps/$APPNAME
     /usr/bin/chmod 644 wp-config.php
-    $HOME/bin/wp core install --admin_name=$USER --admin_email=$accountemail --url="_" --title="Wordpress Blog" --path=/home/$USER/apps/$APPNAME
-
+    coreinstall=`$HOME/bin/wp core install --admin_name=$USER --admin_email=$accountemail --url="_" --title="Wordpress Blog" --path=/home/$USER/apps/$APPNAME`
+    firstLine=`echo "${coreinstall}" | head -1`
+    echo $firstLine
     # Send JSON installed OK.
-    appok='{"id": "'"$UUID"'", "installed_ok":"True" }'
-    /usr/bin/curl -s -X POST --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN" -d"$appok" https://my.opalstack.com/api/v0/app/installed_ok/
-    
+    /usr/bin/curl -s -X POST --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN" -d'{"id": "'"$UUID"'", "installed_ok":"True", "note":"'"$firstLine"'"}' https://my.opalstack.com/api/v0/app/installed_ok/
+
 fi;
