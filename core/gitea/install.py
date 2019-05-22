@@ -39,7 +39,7 @@ class OpalstackAPI():
 
 def create_file(path, contents, writemode='w', perms=0o600):
     """make a file, perms are passed as octal"""
-    with open(path, 'w') as f:
+    with open(path, writemode) as f:
         f.write(contents)
     os.chmod(path, perms)
 
