@@ -7,6 +7,7 @@ import json
 import textwrap
 import secrets
 import string
+import subprocess
 from urllib.parse import urlparse
 
 API_HOST = 'my.opalstack.com'
@@ -121,6 +122,13 @@ def main():
 
             ''')
     create_file(f'{appdir}/custom/conf/app.ini', gitea_conf)
+
+    # create initial user
+    pw = gen_password()
+    cmd = f'{appdir}/gitea admin create-user --name {appinfo["app_user"]} \
+            --password {pw} --email {appinfo["app_user"]}@localhost --admin'
+    createuser = subprocess.check_output(cmd.split())
+    #TODO log credentials
 
 
 if __name__ == '__main__':
