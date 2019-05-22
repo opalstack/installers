@@ -4,6 +4,7 @@ import argparse
 import os
 import http.client
 import json
+import textwrap
 from urllib.parse import urlparse
 
 API_HOST = 'my.opalstack.com'
@@ -81,15 +82,37 @@ def main():
     appinfo = api.get(f'/app/read/{args.app_uuid}')
     appdir = f'/home/{appinfo["app_user"]}/apps/{appinfo["name"]}'
     os.mkdir(f'{appdir}/bin', 0o700)
-    os.mkdir(f'{appdir}/conf', 0o700)
+    os.mkdir(f'{appdir}/custom', 0o700)
+    os.mkdir(f'{appdir}/custom/conf', 0o700)
     os.mkdir(f'{appdir}/repos', 0o700)
 
     # download gitea
     download(GITEA_URL, f'{appdir}/gitea', perms=0o700)
 
     # config
-    gitea_conf = f'[repository]\nROOT = {appdir}/repos/\n\n[server]\nHTTP_PORT = {appinfo["port"]}\n'
-    create_file(f'{appdir}/conf/app.ini', gitea_conf)
+    gitea_conf = textwrap.dedent(f'''\
+            APP_NAME = {appinfo['name']}
+            RUN_MODE = dev
+
+            [server]
+            HTTP_ADDR = 127.0.0.1
+            HTTP_PORT = {appinfo['port']}
+
+            [database]
+            DB_TYPE = sqlite3
+
+            [repository]
+            ROOT = {appdir}/repos
+            DEFAULT_PRIVATE = private
+
+            [security]
+            INSTALL_LOCK   = true
+
+            [service]
+            DISABLE_REGISTRATION = true
+            ''')
+
+    create_file(f'{appdir}/custom/conf/app.ini', gitea_conf)
 
 
 if __name__ == '__main__':
