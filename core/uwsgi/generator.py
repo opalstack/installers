@@ -22,13 +22,24 @@ f.close
 print(f'Wrote {keepalive_path}')
 
 kill_path = f'/home/{user}/apps/{name}/kill'
-kill = '''#!/bin/bash
-kill -9 `cat $HOME/tmp/myprogram.pid`
+kill = f'''#!/bin/bash
+kill -9 `cat $HOME/tmp/{name}.pid`
 '''
+
 f = open(kill_path, 'w+')
 f.write(kill)
 f.close
 print(f'Wrote {kill_path}')
+
+stop_path = f'/home/{user}/apps/{name}/stop'
+stop = f'''/home/{user}/apps/{name}/env/bin/uwsgi --stop /home/{user}/tmp/{name}.pid
+rm  /home/{user}/tmp/{name}.pid
+'''
+
+f = open(stop_path, 'w+')
+f.write(stop)
+f.close
+print(f'Wrote {stop_path}')
 
 myapp_wsgi_path = f'/home/{user}/apps/{name}/myapp.wsgi'
 myapp_wsgi = f'''def application(env, start_response):
