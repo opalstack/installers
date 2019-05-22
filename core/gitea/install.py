@@ -5,6 +5,8 @@ import os
 import http.client
 import json
 import textwrap
+import secrets
+import string
 from urllib.parse import urlparse
 
 API_HOST = 'my.opalstack.com'
@@ -63,6 +65,12 @@ def download(url, localfile, writemode='wb', perms=0o600):
     os.chmod(localfile, perms)
 
 
+def gen_password(length=20):
+    """makes a random password"""
+    chars = string.ascii_letters + string.digits
+    return ''.join(secrets.choice(chars) for i in range(length))
+
+
 def main():
     """run it"""
     # TODO logging
@@ -94,6 +102,10 @@ def main():
             APP_NAME = {appinfo['name']}
             RUN_MODE = dev
 
+            [repository]
+            ROOT = {appdir}/repos
+            DEFAULT_PRIVATE = private
+
             [server]
             HTTP_ADDR = 127.0.0.1
             HTTP_PORT = {appinfo['port']}
@@ -101,17 +113,13 @@ def main():
             [database]
             DB_TYPE = sqlite3
 
-            [repository]
-            ROOT = {appdir}/repos
-            DEFAULT_PRIVATE = private
+            [service]
+            DISABLE_REGISTRATION = true
 
             [security]
             INSTALL_LOCK   = true
 
-            [service]
-            DISABLE_REGISTRATION = true
             ''')
-
     create_file(f'{appdir}/custom/conf/app.ini', gitea_conf)
 
 
