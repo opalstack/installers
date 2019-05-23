@@ -123,12 +123,14 @@ def main():
             ''')
     create_file(f'{appdir}/custom/conf/app.ini', gitea_conf)
 
-    # create initial user
+    # create initial user FIXME
     pw = gen_password()
     cmd = f'{appdir}/gitea admin create-user --name {appinfo["app_user"]} \
             --password {pw} --email {appinfo["app_user"]}@localhost --admin'
     createuser = subprocess.check_output(cmd.split())
     #TODO log credentials
+    #TODO start/stop/restart scripts
+    #TODO push a notification with credentials when done
 
 
 if __name__ == '__main__':
