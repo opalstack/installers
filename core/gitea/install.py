@@ -46,7 +46,7 @@ def create_file(path, contents, writemode='w', perms=0o600):
     with open(path, writemode) as f:
         f.write(contents)
     os.chmod(path, perms)
-    logging.info(f'Created file {path} with permissions {perms}')
+    logging.info(f'Created file {path} with permissions {oct(perms)}')
 
 
 def download(url, localfile, writemode='wb', perms=0o600):
@@ -66,7 +66,7 @@ def download(url, localfile, writemode='wb', perms=0o600):
             else:
                 break
     os.chmod(localfile, perms)
-    logging.info(f'Downloaded {url} as {localfile} with permissions {perms}')
+    logging.info(f'Downloaded {url} as {localfile} with permissions {oct(perms)}')
 
 
 def gen_password(length=20):
