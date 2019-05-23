@@ -72,6 +72,11 @@ def gen_password(length=20):
     return ''.join(secrets.choice(chars) for i in range(length))
 
 
+def run_command(cmd):
+    """runs a command, returns output"""
+     return subprocess.check_output(cmd.split())
+
+
 def main():
     """run it"""
     # TODO logging
@@ -123,11 +128,17 @@ def main():
             ''')
     create_file(f'{appdir}/custom/conf/app.ini', gitea_conf)
 
+    # create the DB
+    cmd = f'{appdir}/gitea migrate'
+    createdb = run_command(cmd)
+
+
     # create initial user FIXME
     pw = gen_password()
     cmd = f'{appdir}/gitea admin create-user --name {appinfo["app_user"]} \
             --password {pw} --email {appinfo["app_user"]}@localhost --admin'
-    createuser = subprocess.check_output(cmd.split())
+    createuser = run_command(cmd)
+
     #TODO log credentials
     #TODO start/stop/restart scripts
     #TODO push a notification with credentials when done
