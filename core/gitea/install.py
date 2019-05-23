@@ -1,6 +1,7 @@
 #! /usr/bin/python3
 
 import argparse
+import logging
 import os
 import http.client
 import json
@@ -45,6 +46,7 @@ def create_file(path, contents, writemode='w', perms=0o600):
     with open(path, writemode) as f:
         f.write(contents)
     os.chmod(path, perms)
+    logging.info(f'Created file {path} with permissions {perms}')
 
 
 def download(url, localfile, writemode='wb', perms=0o600):
@@ -64,6 +66,7 @@ def download(url, localfile, writemode='wb', perms=0o600):
             else:
                 break
     os.chmod(localfile, perms)
+    logging.info(f'Downloaded {url} as {localfile} with permissions {perms}')
 
 
 def gen_password(length=20):
@@ -74,12 +77,12 @@ def gen_password(length=20):
 
 def run_command(cmd):
     """runs a command, returns output"""
+    logging.info(f'Running: {cmd}')
     return subprocess.check_output(cmd.split())
 
 
 def main():
     """run it"""
-    # TODO logging
     # grab args from cmd or env
     parser = argparse.ArgumentParser(
         description='Installs Gitea on Opalstack account')
@@ -91,6 +94,10 @@ def main():
                         default=os.environ.get('OPAL_TOKEN'))
     args = parser.parse_args()
 
+    # init logging
+    logging.basicConfig(level=logging.INFO,
+                        format='[%(asctime)s] %(levelname)s: %(message)s')
+
     # go!
     api = OpalstackAPI(API_HOST, API_BASE_URI, args.opal_token)
     appinfo = api.get(f'/app/read/{args.app_uuid}')
@@ -99,6 +106,7 @@ def main():
     os.mkdir(f'{appdir}/custom', 0o700)
     os.mkdir(f'{appdir}/custom/conf', 0o700)
     os.mkdir(f'{appdir}/repos', 0o700)
+    logging.info('Created initial gitea subdirectories')
 
     # download gitea
     download(GITEA_URL, f'{appdir}/gitea', perms=0o700)
@@ -131,16 +139,19 @@ def main():
     # create the DB
     cmd = f'{appdir}/gitea migrate'
     createdb = run_command(cmd)
+    logging.debug(createdb)
 
     # create initial user
     pw = gen_password()
     cmd = f'{appdir}/gitea admin create-user --name {appinfo["app_user"]} \
             --password {pw} --email {appinfo["app_user"]}@localhost --admin'
     createuser = run_command(cmd)
+    logging.info(f'created initial gitea user {appinfo["app_user"]} with password {pw}')
+    logging.debug(createuser)
 
-    #TODO log credentials
     #TODO start/stop/restart scripts
     #TODO push a notification with credentials when done
+    #TODO installed_ok
 
 
 if __name__ == '__main__':
