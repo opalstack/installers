@@ -99,6 +99,7 @@ def main():
                         format='[%(asctime)s] %(levelname)s: %(message)s')
 
     # go!
+    logging.info(f'Started installation of Gitea app {args.app_name}')
     api = OpalstackAPI(API_HOST, API_BASE_URI, args.opal_token)
     appinfo = api.get(f'/app/read/{args.app_uuid}')
     appdir = f'/home/{appinfo["app_user"]}/apps/{appinfo["name"]}'
