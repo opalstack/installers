@@ -153,6 +153,9 @@ def main():
     #TODO start/stop/restart scripts
     #TODO push a notification with credentials when done
     #TODO installed_ok
+    #TODO user has to set his DOMAIN and ROOT_URL in app.ini
+    #TODO user has to set his email address in account settings
+    #TODO SSH access, might be tricky
 
 
 if __name__ == '__main__':
