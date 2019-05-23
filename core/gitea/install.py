@@ -150,12 +150,12 @@ def main():
     logging.info(f'created initial gitea user {appinfo["app_user"]} with password {pw}')
     logging.debug(createuser)
 
-    #TODO start/stop/restart scripts
+    #TODO start/stop/restart scripts incl pidfile
     #TODO push a notification with credentials when done
     #TODO installed_ok
     #TODO user has to set his DOMAIN and ROOT_URL in app.ini
     #TODO user has to set his email address in account settings
-    #TODO SSH access, might be tricky
+    #TODO SSH access, might be tricky, disable option if can't make it work.
 
 
 if __name__ == '__main__':
