@@ -74,7 +74,7 @@ def gen_password(length=20):
 
 def run_command(cmd):
     """runs a command, returns output"""
-     return subprocess.check_output(cmd.split())
+    return subprocess.check_output(cmd.split())
 
 
 def main():
@@ -132,8 +132,7 @@ def main():
     cmd = f'{appdir}/gitea migrate'
     createdb = run_command(cmd)
 
-
-    # create initial user FIXME
+    # create initial user
     pw = gen_password()
     cmd = f'{appdir}/gitea admin create-user --name {appinfo["app_user"]} \
             --password {pw} --email {appinfo["app_user"]}@localhost --admin'
