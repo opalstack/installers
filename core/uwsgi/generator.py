@@ -32,7 +32,8 @@ f.close
 print(f'Wrote {kill_path}')
 
 stop_path = f'/home/{user}/apps/{name}/stop'
-stop = f'''/home/{user}/apps/{name}/env/bin/uwsgi --stop /home/{user}/tmp/{name}.pid
+stop = f'''#!/bin/bash
+/home/{user}/apps/{name}/env/bin/uwsgi --stop /home/{user}/tmp/{name}.pid
 rm  /home/{user}/tmp/{name}.pid
 '''
 
