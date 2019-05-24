@@ -147,14 +147,19 @@ def main():
     cmd = f'{appdir}/gitea admin create-user --name {appinfo["app_user"]} \
             --password {pw} --email {appinfo["app_user"]}@localhost --admin'
     createuser = run_command(cmd)
-    logging.info(f'created initial gitea user {appinfo["app_user"]} with password {pw}')
+    logging.info(f'created initial gitea user {appinfo["app_user"]}')
+    logging.debug(f'created initial gitea user {appinfo["app_user"]} with password {pw}')
     logging.debug(createuser)
 
-    #TODO start/stop/restart scripts incl pidfile
-    #TODO push a notification with credentials when done
-    #TODO installed_ok
-    #TODO user has to set his DOMAIN and ROOT_URL in app.ini
-    #TODO user has to set his email address in account settings
+    # finished, push a notice with credentials
+    msg = textwrap.dedent(f'''Initial user is {appinfo["app_user"]},
+                          password: {pw} - Don't forget to set DOMAIN
+                          and ROOT_URL in app.ini, and your email address
+                          in your Gitea user settings.''')
+    payload = json_dumps({'id': args.app_uuid, 'installed_ok': True,
+                          'note': msg})
+    finished=api.post('/app/installed_ok/', payload)
+
     #TODO SSH access, might be tricky, disable option if can't make it work.
 
 
