@@ -151,11 +151,10 @@ def main():
     logging.debug(f'created initial gitea user {appinfo["app_user"]} with password {pw}')
     logging.debug(createuser)
 
+    #TODO scripts
+
     # finished, push a notice with credentials
-    msg = textwrap.dedent(f'''Initial user is {appinfo["app_user"]},
-                          password: {pw} - Don't forget to set DOMAIN
-                          and ROOT_URL in app.ini, and your email address
-                          in your Gitea user settings.''')
+    msg = f'Initial user is {appinfo["app_user"]}, password: {pw} - Don\'t forget to set DOMAIN and ROOT_URL in app.ini, and your email address in your Gitea user settings.'
     payload = json.dumps({'id': args.app_uuid, 'installed_ok': True,
                           'note': msg})
     finished=api.post('/app/installed_ok/', payload)
