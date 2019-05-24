@@ -51,6 +51,7 @@ def create_file(path, contents, writemode='w', perms=0o600):
 
 def download(url, localfile, writemode='wb', perms=0o600):
     """save a remote file, perms are passed as octal"""
+    logging.info(f'Downloading {url} as {localfile} with permissions {oct(perms)}')
     u = urlparse(url)
     if u.scheme == 'http':
         conn = http.client.HTTPConnection(u.netloc)
@@ -154,7 +155,7 @@ def main():
     #TODO scripts
 
     # finished, push a notice with credentials
-    msg = f'Initial user is {appinfo["app_user"]}, password: {pw} - Don\'t forget to set DOMAIN and ROOT_URL in app.ini, and your email address in your Gitea user settings.'
+    msg = f'''Initial user is {appinfo["app_user"]}, password: {pw} - Don't forget to set DOMAIN and ROOT_URL in app.ini, and your email address in your Gitea user settings.'''
     payload = json.dumps({'id': args.app_uuid, 'installed_ok': True,
                           'note': msg})
     finished=api.post('/app/installed_ok/', payload)
