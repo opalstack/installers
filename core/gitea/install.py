@@ -163,7 +163,6 @@ def main():
                           'note': msg})
     finished=api.post('/app/installed_ok/', payload)
 
-    #TODO SSH access, might be tricky, disable option if can't make it work.
     logging.info(f'Completed installation of Gitea app {args.app_name}')
 
 
