@@ -156,7 +156,7 @@ def main():
                           password: {pw} - Don't forget to set DOMAIN
                           and ROOT_URL in app.ini, and your email address
                           in your Gitea user settings.''')
-    payload = json_dumps({'id': args.app_uuid, 'installed_ok': True,
+    payload = json.dumps({'id': args.app_uuid, 'installed_ok': True,
                           'note': msg})
     finished=api.post('/app/installed_ok/', payload)
 
