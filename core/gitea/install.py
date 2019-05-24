@@ -125,6 +125,9 @@ def main():
             [server]
             HTTP_ADDR = 127.0.0.1
             HTTP_PORT = {appinfo['port']}
+            ; change DOMAIN and ROOT_URL below to your domain and site
+            DOMAIN = localhost
+            ROOT_URL = http://localhost
 
             [database]
             DB_TYPE = sqlite3
@@ -161,6 +164,7 @@ def main():
     finished=api.post('/app/installed_ok/', payload)
 
     #TODO SSH access, might be tricky, disable option if can't make it work.
+    logging.info(f'Completed installation of Gitea app {args.app_name}')
 
 
 if __name__ == '__main__':
