@@ -2,7 +2,7 @@ import os
 user = os.getenv('USER')
 name = os.getenv('APPNAME')
 port = os.getenv('PORT')
-keepalive_path = f'/home/{user}/apps/{name}/keepalive'
+keepalive_path = f'/home/{user}/apps/{name}/start'
 keepalive = f'''#!/bin/bash
 mkdir -p "$HOME/tmp"
 PIDFILE="$HOME/tmp/{name}.pid"
