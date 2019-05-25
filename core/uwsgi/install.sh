@@ -97,7 +97,7 @@ chmod +x /home/$USER/apps/$APPNAME/start
 chmod +x /home/$USER/apps/$APPNAME/kill
 chmod +x /home/$USER/apps/$APPNAME/stop
 
-cline="*/1 * * * * /home/$USER/apps/$APPNAME/start"
+cline="*/10 * * * * /home/$USER/apps/$APPNAME/start"
 (crontab -l; echo "$cline" ) | crontab -
 
 # add installed OK
