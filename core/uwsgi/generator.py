@@ -2,7 +2,7 @@ import os
 user = os.getenv('USER')
 name = os.getenv('APPNAME')
 port = os.getenv('PORT')
-keepalive_path = f'/home/{user}/apps/{name}/keepalive'
+keepalive_path = f'/home/{user}/apps/{name}/start'
 keepalive = f'''#!/bin/bash
 mkdir -p "$HOME/tmp"
 PIDFILE="$HOME/tmp/{name}.pid"
@@ -32,7 +32,8 @@ f.close
 print(f'Wrote {kill_path}')
 
 stop_path = f'/home/{user}/apps/{name}/stop'
-stop = f'''/home/{user}/apps/{name}/env/bin/uwsgi --stop /home/{user}/tmp/{name}.pid
+stop = f'''#!/bin/bash
+/home/{user}/apps/{name}/env/bin/uwsgi --stop /home/{user}/tmp/{name}.pid
 rm  /home/{user}/tmp/{name}.pid
 '''
 
