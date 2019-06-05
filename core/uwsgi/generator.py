@@ -11,10 +11,9 @@ if [ -e "${{PIDFILE}}" ] && (ps -u $(whoami) -opid= |
   echo "Already running."
   exit 99
 fi
-printf 'Started at %(%F %T)T\n'
-/home/{user}/apps/{name}/env/bin/uwsgi --http 127.0.0.1:{port} -H /home/{user}/apps/{name}/env/ --wsgi-file /home/{user}/apps/{name}/myapp.wsgi --daemonize /home/{user}/logs/{name}/uwsgi.log --processes 2 --threads 2 --touch-reload /home/{user}/apps/{name}/myapp.wsgi --pidfile $PIDFILE
-echo $! > "${{PIDFILE}}"
-chmod 644 "${{PIDFILE}}"
+echo -n 'Started at '
+date "+%Y-%m-%d %H:%M:%S"
+/home/{user}/apps/{name}/env/bin/uwsgi -M --http 127.0.0.1:{port} -H /home/{user}/apps/{name}/env/ --wsgi-file /home/{user}/apps/{name}/myapp.wsgi --daemonize /home/{user}/logs/{name}/uwsgi.log --processes 2 --threads 2 --touch-reload /home/{user}/apps/{name}/myapp.wsgi --pidfile $PIDFILE
 '''
 f = open(keepalive_path, 'w+')
 f.write(keepalive)

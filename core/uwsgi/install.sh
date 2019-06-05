@@ -94,6 +94,7 @@ KQpmLndyaXRlKG15YXBwX3dzZ2kpCmYuY2xvc2UKcHJpbnQoZidXcm90ZSB7bXlhcHBfd3NnaV9w
 YXRofScpCg==" | base64 --decode > /home/$USER/apps/$APPNAME/tmp/$APPNAME-generator.py 
 /usr/bin/python3.6 /home/$USER/apps/$APPNAME/tmp/$APPNAME-generator.py 
 
+
 chmod +x /home/$USER/apps/$APPNAME/start
 chmod +x /home/$USER/apps/$APPNAME/kill
 chmod +x /home/$USER/apps/$APPNAME/stop
