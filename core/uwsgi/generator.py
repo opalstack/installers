@@ -4,7 +4,6 @@ name = os.getenv('APPNAME')
 port = os.getenv('PORT')
 keepalive_path = f'/home/{user}/apps/{name}/start'
 keepalive = f'''#!/bin/bash
-mkdir -p "$HOME/apps/{name}/tmp"
 PIDFILE="$HOME/apps/{name}/tmp/{name}.pid"
 if [ -e "${{PIDFILE}}" ] && (ps -u $(whoami) -opid= |
                            grep -P "^\s*$(cat ${{PIDFILE}})$" &> /dev/null); then
@@ -42,8 +41,6 @@ rm  /home/{user}/apps/{name}/tmp/{name}.pid
 fi
 echo "No PID file"
 '''
-
-
 
 f = open(stop_path, 'w+')
 f.write(stop)
