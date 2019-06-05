@@ -4,8 +4,8 @@ name = os.getenv('APPNAME')
 port = os.getenv('PORT')
 keepalive_path = f'/home/{user}/apps/{name}/start'
 keepalive = f'''#!/bin/bash
-mkdir -p "$HOME/tmp"
-PIDFILE="$HOME/tmp/{name}.pid"
+mkdir -p "$HOME/apps/{name}/tmp"
+PIDFILE="$HOME/apps/{name}/tmp/{name}.pid"
 if [ -e "${{PIDFILE}}" ] && (ps -u $(whoami) -opid= |
                            grep -P "^\s*$(cat ${{PIDFILE}})$" &> /dev/null); then
   echo "Already running."
@@ -23,7 +23,7 @@ print(f'Wrote {keepalive_path}')
 
 kill_path = f'/home/{user}/apps/{name}/kill'
 kill = f'''#!/bin/bash
-kill -9 `cat $HOME/tmp/{name}.pid`
+kill -9 `cat $HOME/apps/{name}/tmp/{name}.pid`
 '''
 
 f = open(kill_path, 'w+')
@@ -33,8 +33,8 @@ print(f'Wrote {kill_path}')
 
 stop_path = f'/home/{user}/apps/{name}/stop'
 stop = f'''#!/bin/bash
-/home/{user}/apps/{name}/env/bin/uwsgi --stop /home/{user}/tmp/{name}.pid
-rm  /home/{user}/tmp/{name}.pid
+/home/{user}/apps/{name}/env/bin/uwsgi --stop /home/{user}/apps/{name}/tmp/{name}.pid
+rm  /home/{user}/apps/{name}/tmp/{name}.pid
 '''
 
 f = open(stop_path, 'w+')
