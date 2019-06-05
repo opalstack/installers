@@ -32,9 +32,18 @@ print(f'Wrote {kill_path}')
 
 stop_path = f'/home/{user}/apps/{name}/stop'
 stop = f'''#!/bin/bash
+
+PIDFILE="$HOME/apps/{name}/tmp/{name}.pid"
+if [ -e "${{PIDFILE}}" ] && (ps -u $(whoami) -opid= |
+                           grep -P "^\s*$(cat ${{PIDFILE}})$" &> /dev/null); then
 /home/{user}/apps/{name}/env/bin/uwsgi --stop /home/{user}/apps/{name}/tmp/{name}.pid
 rm  /home/{user}/apps/{name}/tmp/{name}.pid
+  exit 99
+fi
+echo "No PID file"
 '''
+
+
 
 f = open(stop_path, 'w+')
 f.write(stop)
