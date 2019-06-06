@@ -189,11 +189,13 @@ def main():
                   exit 99
                 fi
 
-                "$({appdir}/gitea)" &>> $HOME/logs/{appname}/gitea.log &
+                "$({appdir}/gitea)" &>> $HOME/logs/{appinfo["name"]}/gitea.log &
 
                 echo $! > "$PIDFILE"
                 chmod 600 "$PIDFILE"
                 ''')
+    create_file(f'{appdir}/start}'
+    cmd = f'chmod 700 {appdir}/start}'
 
     # finished, push a notice with credentials
     msg = f'Initial user is {appinfo["app_user"]}, password: {pw}'
