@@ -177,6 +177,23 @@ def main():
     logging.debug(createuser)
 
     #TODO scripts
+    # start script
+    start_script = textwrap.dedent(f'''\
+                #!/bin/bash
+                cd {appdir}
+                mkdir -p {appdir}/var
+                PIDFILE="{appdir}/var/gitea.pid"
+
+                if [ -e "$PIDFILE" ] && (pgrep -u {appinfo["app_user"]} | grep -x -f $PIDFILE &> /dev/null); then
+                  echo "Gitea instance already running."
+                  exit 99
+                fi
+
+                "$({appdir}/gitea)" &>> $HOME/logs/{appname}/gitea.log &
+
+                echo $! > "$PIDFILE"
+                chmod 600 "$PIDFILE"
+                ''')
 
     # finished, push a notice with credentials
     msg = f'Initial user is {appinfo["app_user"]}, password: {pw}'
