@@ -1,6 +1,7 @@
 #! /usr/bin/python3
 
 import argparse
+import sys
 import logging
 import os
 import http.client
@@ -16,15 +17,32 @@ API_BASE_URI = '/api/v0'
 GITEA_URL = 'https://dl.gitea.io/gitea/1.8/gitea-1.8-linux-amd64'
 
 
-class OpalstackAPI():
+class OpalstackAPITool():
     """simple wrapper for http.client get and post"""
-    def __init__(self, host, base_uri, authtoken):
+    def __init__(self, host, base_uri, authtoken, user, password):
         self.host = host
+        self.base_uri = base_uri
+
+        # if there is no auth token, then try to log in with provided credentials
+        if not authtoken:
+            endpoint = self.base_uri + '/login/'
+            payload = json.dumps({
+                'username': user,
+                'password': password
+            })
+            conn = http.client.HTTPSConnection(self.host)
+            conn.request('POST', endpoint, payload,
+                         headers={'Content-type': 'application/json'})
+            result = json.loads(conn.getresponse().read())
+            if result['username'] == 'Invalid username/password':
+                sys.exit('Invalid username or password and no auth token provided, exiting.')
+            else:
+                authtoken = result['token']
+
         self.headers = {
             'Content-type': 'application/json',
             'Authorization': f'Token {authtoken}'
         }
-        self.base_uri = base_uri
 
     def get(self, endpoint):
         """GETs an API endpoint"""
@@ -93,15 +111,18 @@ def main():
                         default=os.environ.get('APPNAME'))
     parser.add_argument('-t', dest='opal_token', help='API auth token',
                         default=os.environ.get('OPAL_TOKEN'))
+    parser.add_argument('-u', dest='opal_user', help='Opalstack account name',
+                        default=os.environ.get('OPAL_USER'))
+    parser.add_argument('-p', dest='opal_password', help='Opalstack account password',
+                        default=os.environ.get('OPAL_PASS'))
     args = parser.parse_args()
 
     # init logging
     logging.basicConfig(level=logging.INFO,
                         format='[%(asctime)s] %(levelname)s: %(message)s')
-
     # go!
     logging.info(f'Started installation of Gitea app {args.app_name}')
-    api = OpalstackAPI(API_HOST, API_BASE_URI, args.opal_token)
+    api = OpalstackAPITool(API_HOST, API_BASE_URI, args.opal_token, args.opal_user, args.opal_password)
     appinfo = api.get(f'/app/read/{args.app_uuid}')
     appdir = f'/home/{appinfo["app_user"]}/apps/{appinfo["name"]}'
     os.mkdir(f'{appdir}/bin', 0o700)
