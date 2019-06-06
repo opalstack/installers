@@ -198,6 +198,31 @@ def main():
     cmd = f'chmod 700 {appdir}/start'
     createstart = run_command(cmd)
 
+    # stop script
+    stop_script = textwrap.dedent(f'''\
+                #!/bin/bash
+                cd {appdir}
+                PIDFILE="{appdir}/var/gitea.pid"
+                PID=$(cat $PIDFILE)
+
+                if [ -e "$PIDFILE" ] && (pgrep -u {appinfo["app_user"]} | grep -x -f $PIDFILE &> /dev/null); then
+                  kill $PID
+                  sleep 3
+                fi
+
+                if [ -e "$PIDFILE" ] && (pgrep -u {appinfo["app_user"]} | grep -x -f $PIDFILE &> /dev/null); then
+                  sleep 3
+                  kill -9 $PID
+                fi
+                rm -f $PIDFILE
+                echo "Stopped."
+                ''')
+    create_file(f'{appdir}/stop', stop_script)
+    cmd = f'chmod 700 {appdir}/stop'
+    createstop = run_command(cmd)
+
+
+
     # finished, push a notice with credentials
     msg = f'Initial user is {appinfo["app_user"]}, password: {pw}'
     payload = json.dumps({'id': args.app_uuid, 'installed_ok': True,
