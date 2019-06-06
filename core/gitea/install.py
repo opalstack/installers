@@ -195,7 +195,7 @@ def main():
                 chmod 600 "$PIDFILE"
                 ''')
     create_file(f'{appdir}/start')
-    cmd = f'chmod 700 {appdir}/start}'
+    cmd = f'chmod 700 {appdir}/start'
     createstart = run_command(cmd)
 
     # finished, push a notice with credentials
