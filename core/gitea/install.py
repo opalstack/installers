@@ -194,8 +194,9 @@ def main():
                 echo $! > "$PIDFILE"
                 chmod 600 "$PIDFILE"
                 ''')
-    create_file(f'{appdir}/start}'
+    create_file(f'{appdir}/start}')
     cmd = f'chmod 700 {appdir}/start}'
+    createstart = run_command(cmd)
 
     # finished, push a notice with credentials
     msg = f'Initial user is {appinfo["app_user"]}, password: {pw}'
