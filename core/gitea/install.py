@@ -35,7 +35,8 @@ class OpalstackAPITool():
                          headers={'Content-type': 'application/json'})
             result = json.loads(conn.getresponse().read())
             if not result.get('token'):
-                sys.exit('Invalid username or password and no auth token provided, exiting.')
+                logging.warn('Invalid username or password and no auth token provided, exiting.')
+                sys.exit()
             else:
                 authtoken = result['token']
 
