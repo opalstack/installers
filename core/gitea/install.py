@@ -189,7 +189,7 @@ def main():
                   exit 99
                 fi
 
-                "$({appdir}/gitea)" &>> $HOME/logs/{appinfo["name"]}/gitea.log &
+                nohup "$({appdir}/gitea)" >> $HOME/logs/{appinfo["name"]}/gitea.log 2>&1 &
 
                 echo $! > "$PIDFILE"
                 chmod 600 "$PIDFILE"
