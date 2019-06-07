@@ -156,7 +156,7 @@ def main():
     # config
     gitea_conf = textwrap.dedent(f'''\
             APP_NAME = {appinfo['name']}
-            RUN_MODE = dev
+            RUN_MODE = prod
 
             [repository]
             ROOT = {appdir}/repos
