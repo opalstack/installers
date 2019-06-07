@@ -244,8 +244,8 @@ def main():
                 Opalstack Gitea README
                 ======================
                 Set your email and URL, fool.
-                '''
-    create_file(f'{appdir}/README')
+                ''')
+    create_file(f'{appdir}/README', readme)
 
     # finished, push a notice with credentials
     msg = f'Initial user is {appinfo["app_user"]}, password: {pw} - see README in app directory for final steps.'
