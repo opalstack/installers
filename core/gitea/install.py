@@ -143,8 +143,11 @@ def main():
     os.mkdir(f'{appdir}/bin', 0o700)
     os.mkdir(f'{appdir}/custom', 0o700)
     os.mkdir(f'{appdir}/custom/conf', 0o700)
+    os.mkdir(f'{appdir}/data', 0o700)
+    os.mkdir(f'{appdir}/log', 0o700)
     os.mkdir(f'{appdir}/repos', 0o700)
     os.mkdir(f'{appdir}/tmp', 0o700)
+    os.mkdir(f'{appdir}/var', 0o700)
     logging.info('Created initial gitea subdirectories')
 
     # download gitea
