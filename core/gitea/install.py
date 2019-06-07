@@ -209,6 +209,7 @@ def main():
 
                 echo $! > "$PIDFILE"
                 chmod 600 "$PIDFILE"
+                echo "Started."
                 ''')
     create_file(f'{appdir}/start', start_script, perms=0o700)
 
@@ -239,9 +240,35 @@ def main():
 
     # make README
     readme = textwrap.dedent('''\
-                Opalstack Gitea README
-                ======================
-                Set your email and URL, fool.
+                # Opalstack Gitea README
+
+                ## Post-install steps
+
+                Please take the following steps before you begin to use your Gitea
+                installation:
+
+                1. Connect your Gitea application to a site route in the control panel.
+
+                2. Edit {appdir}/custom/conf/app.ini to change DOMAIN and ROOT_URL to
+                   use your Gitea site domain.
+
+                3. Run the following commands to restart your Gitea instance:
+
+                   {appdir}/stop
+                   {appdir}/start
+
+                4. Visit your Gitea site and log in.
+
+                5. Click on the Profile menu in the top right corner and select
+                   Settings.
+
+                6. Set your email address to the address that you want to use with your
+                   Gitea profile.
+
+                7. If you plan to manage your repositories over SSH instead of HTTPS,
+                   add your SSH key in your Gitea SSH/GPG Key settings.
+
+                You're now ready to start using Gitea!
                 ''')
     create_file(f'{appdir}/README', readme)
 
