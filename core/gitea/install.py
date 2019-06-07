@@ -236,8 +236,8 @@ def main():
     createstop = run_command(cmd)
 
     # cron
-    cmd = f'(crontab -l 2>/dev/null; echo "*/10 * * * * {appdir}/start > /dev/null 2>&1") | crontab -'
-    cronjob = run_command(cmd)
+    croncmd = f'*/10 * * * * {appdir}/start > /dev/null 2>&1'
+    cronjob = add_cronjob(croncmd)
 
     # finished, push a notice with credentials
     msg = f'Initial user is {appinfo["app_user"]}, password: {pw}'
