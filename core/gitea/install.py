@@ -100,6 +100,18 @@ def run_command(cmd):
     logging.info(f'Running: {cmd}')
     return subprocess.check_output(cmd.split())
 
+def add_cronjob(cronjob):
+    """appends a cron job to the user's crontab"""
+    homedir = os.path.expanduser('~')
+    tmpname = f'{homedir}/.tmp{gen_password()}'
+    tmp = open(tmpname, 'w')
+    subprocess.run('crontab -l'.split(),stdout=tmp)
+    tmp.write(f'{cronjob}\n')
+    tmp.close()
+    cmd = 'crontab {tmpname}'
+    doit = run_command(cmd)
+
+
 
 def main():
     """run it"""
@@ -130,6 +142,7 @@ def main():
     os.mkdir(f'{appdir}/custom', 0o700)
     os.mkdir(f'{appdir}/custom/conf', 0o700)
     os.mkdir(f'{appdir}/repos', 0o700)
+    os.mkdir(f'{appdir}/tmp', 0o700)
     logging.info('Created initial gitea subdirectories')
 
     # download gitea
@@ -177,10 +190,10 @@ def main():
     logging.debug(f'created initial gitea user {appinfo["app_user"]} with password {pw}')
     logging.debug(createuser)
 
-    #TODO scripts
     # start script
     start_script = textwrap.dedent(f'''\
                 #!/bin/bash
+                export TMPDIR={appdir}/tmp
                 cd {appdir}
                 mkdir -p {appdir}/var
                 PIDFILE="{appdir}/var/gitea.pid"
