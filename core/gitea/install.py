@@ -211,7 +211,6 @@ def main():
                 chmod 600 "$PIDFILE"
                 ''')
     create_file(f'{appdir}/start', start_script, perms=0o700)
-    createstart = run_command(cmd)
 
     # stop script
     stop_script = textwrap.dedent(f'''\
@@ -233,7 +232,6 @@ def main():
                 echo "Stopped."
                 ''')
     create_file(f'{appdir}/stop', stop_script, perms=0o700)
-    createstop = run_command(cmd)
 
     # cron
     croncmd = f'*/10 * * * * {appdir}/start > /dev/null 2>&1'
