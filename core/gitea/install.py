@@ -110,6 +110,7 @@ def add_cronjob(cronjob):
     tmp.close()
     cmd = f'crontab {tmpname}'
     doit = run_command(cmd)
+    cmd = run_command(f'rm -f {tmpname}')
 
 
 
