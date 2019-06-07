@@ -278,6 +278,10 @@ def main():
                 ''')
     create_file(f'{appdir}/README', readme)
 
+    # start it
+    cmd = f'{appdir}/start'
+    startit = run_command(cmd)
+
     # finished, push a notice with credentials
     msg = f'Initial user is {appinfo["app_user"]}, password: {pw} - see README in app directory for final steps.'
     payload = json.dumps({'id': args.app_uuid, 'installed_ok': True,
