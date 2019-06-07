@@ -218,12 +218,13 @@ def main():
                 #!/bin/bash
                 cd {appdir}
                 PIDFILE="{appdir}/var/gitea.pid"
-                PID=$(cat $PIDFILE)
 
                 if [ ! -e "$PIDFILE" ]; then
                     echo "$PIDFILE missing, maybe Gitea is already stopped?"
                     exit 99
                 fi
+
+                PID=$(cat $PIDFILE)
 
                 if [ -e "$PIDFILE" ] && (pgrep -u {appinfo["app_user"]} | grep -x -f $PIDFILE &> /dev/null); then
                   kill $PID
