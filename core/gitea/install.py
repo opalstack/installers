@@ -108,7 +108,7 @@ def add_cronjob(cronjob):
     subprocess.run('crontab -l'.split(),stdout=tmp)
     tmp.write(f'{cronjob}\n')
     tmp.close()
-    cmd = 'crontab {tmpname}'
+    cmd = f'crontab {tmpname}'
     doit = run_command(cmd)
 
 
