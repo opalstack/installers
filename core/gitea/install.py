@@ -255,8 +255,8 @@ def main():
 
                 1. Connect your Gitea application to a site route in the control panel.
 
-                2. Edit {appdir}/custom/conf/app.ini to change DOMAIN and ROOT_URL to
-                   use your Gitea site domain.
+                2. Edit {appdir}/custom/conf/app.ini to change DOMAIN
+                   and ROOT_URL to use your Gitea site domain.
 
                 3. Run the following commands to restart your Gitea instance:
 
