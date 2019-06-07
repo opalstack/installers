@@ -220,12 +220,18 @@ def main():
                 PIDFILE="{appdir}/var/gitea.pid"
                 PID=$(cat $PIDFILE)
 
+                if [ ! -e "$PIDFILE" ]; then
+                    echo "$PIDFILE missing, maybe Gitea is already stopped?"
+                    exit 99
+                fi
+
                 if [ -e "$PIDFILE" ] && (pgrep -u {appinfo["app_user"]} | grep -x -f $PIDFILE &> /dev/null); then
                   kill $PID
                   sleep 3
                 fi
 
                 if [ -e "$PIDFILE" ] && (pgrep -u {appinfo["app_user"]} | grep -x -f $PIDFILE &> /dev/null); then
+                  echo "Gitea did not stop, killing it."
                   sleep 3
                   kill -9 $PID
                 fi
@@ -239,7 +245,7 @@ def main():
     cronjob = add_cronjob(croncmd)
 
     # make README
-    readme = textwrap.dedent('''\
+    readme = textwrap.dedent(f'''\
                 # Opalstack Gitea README
 
                 ## Post-install steps
