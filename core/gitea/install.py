@@ -111,6 +111,7 @@ def add_cronjob(cronjob):
     cmd = f'crontab {tmpname}'
     doit = run_command(cmd)
     cmd = run_command(f'rm -f {tmpname}')
+    logging.info(f'Added cron job: {cronjob}')
 
 
 
@@ -209,8 +210,7 @@ def main():
                 echo $! > "$PIDFILE"
                 chmod 600 "$PIDFILE"
                 ''')
-    create_file(f'{appdir}/start', start_script)
-    cmd = f'chmod 700 {appdir}/start'
+    create_file(f'{appdir}/start', start_script, perms=0o700)
     createstart = run_command(cmd)
 
     # stop script
@@ -232,16 +232,23 @@ def main():
                 rm -f $PIDFILE
                 echo "Stopped."
                 ''')
-    create_file(f'{appdir}/stop', stop_script)
-    cmd = f'chmod 700 {appdir}/stop'
+    create_file(f'{appdir}/stop', stop_script, perms=0o700)
     createstop = run_command(cmd)
 
     # cron
     croncmd = f'*/10 * * * * {appdir}/start > /dev/null 2>&1'
     cronjob = add_cronjob(croncmd)
 
+    # make README
+    readme = textwrap.dedent('''\
+                Opalstack Gitea README
+                ======================
+                Set your email and URL, fool.
+                '''
+    create_file(f'{appdir}/README
+
     # finished, push a notice with credentials
-    msg = f'Initial user is {appinfo["app_user"]}, password: {pw}'
+    msg = f'Initial user is {appinfo["app_user"]}, password: {pw} - see README in app directory for final steps.'
     payload = json.dumps({'id': args.app_uuid, 'installed_ok': True,
                           'note': msg})
     finished=api.post('/app/installed_ok/', payload)
