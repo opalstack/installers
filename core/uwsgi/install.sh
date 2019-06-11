@@ -26,13 +26,13 @@ echo "$now" >> /home/$USER/logs/$APPNAME/install.log
 if [ -z $UUID ] || [ -z $OPAL_TOKEN ] || [ -z $APPNAME ]
 then
      printf $CRED2
-     echo 'This command requires the following parameters to function, 
+     echo 'This command requires the following parameters to function,
      -i App UUID, used to make API calls to control panel.
-     -t Control panel TOKEN, used to authenticate to the API. 
+     -t Control panel TOKEN, used to authenticate to the API.
      -n Application NAME, must match the name in the control panel
      '
      exit 1
-else    
+else
     # Get the port and verify the app exists, and thus the file schema exists.
     if serverjson=`curl -s --fail --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN"  https://my.opalstack.com/api/v0/app/read/$UUID` ;then
          printf $CGREEN2
@@ -57,7 +57,7 @@ mkdir -p $HOME/apps/$APPNAME/tmp
 /home/$USER/.local/bin/virtualenv /home/$USER/apps/$APPNAME/env
 source /home/$USER/apps/$APPNAME/env/bin/activate
 
-# install latest LTS release 
+# install latest LTS release
 pip3.6 install https://projects.unbit.it/downloads/uwsgi-lts.tar.gz
 chmod +x /home/$USER/apps/$APPNAME/env/bin/uwsgi
 
@@ -95,8 +95,8 @@ fS9hcHBzL3tuYW1lfS9teWFwcC53c2dpJwpteWFwcF93c2dpID0gZicnJ2RlZiBhcHBsaWNhdGlv
 bihlbnYsIHN0YXJ0X3Jlc3BvbnNlKToKICAgIHN0YXJ0X3Jlc3BvbnNlKCcyMDAgT0snLCBbKCdD
 b250ZW50LVR5cGUnLCd0ZXh0L2h0bWwnKV0pCiAgICByZXR1cm4gW2InSGVsbG8gV29ybGQhJ10K
 JycnCmYgPSBvcGVuKG15YXBwX3dzZ2lfcGF0aCwgJ3crJykKZi53cml0ZShteWFwcF93c2dpKQpm
-LmNsb3NlCnByaW50KGYnV3JvdGUge215YXBwX3dzZ2lfcGF0aH0nKQo=" | base64 --decode > /home/$USER/apps/$APPNAME/tmp/$APPNAME-generator.py 
-/usr/bin/python3.6 /home/$USER/apps/$APPNAME/tmp/$APPNAME-generator.py 
+LmNsb3NlCnByaW50KGYnV3JvdGUge215YXBwX3dzZ2lfcGF0aH0nKQo=" | base64 --decode > /home/$USER/apps/$APPNAME/tmp/$APPNAME-generator.py
+/usr/bin/python3.6 /home/$USER/apps/$APPNAME/tmp/$APPNAME-generator.py
 
 chmod +x /home/$USER/apps/$APPNAME/start
 chmod +x /home/$USER/apps/$APPNAME/kill
@@ -108,4 +108,3 @@ cline="*/10 * * * * /home/$USER/apps/$APPNAME/start"
 # add installed OK
 appok='{"id": "'"$UUID"'", "installed_ok":"True" }'
 /usr/bin/curl -s -X POST --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN" -d"$appok" https://my.opalstack.com/api/v0/app/installed_ok/
-    
