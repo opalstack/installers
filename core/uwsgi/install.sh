@@ -97,6 +97,7 @@ b250ZW50LVR5cGUnLCd0ZXh0L2h0bWwnKV0pCiAgICByZXR1cm4gW2InSGVsbG8gV29ybGQhJ10K
 JycnCmYgPSBvcGVuKG15YXBwX3dzZ2lfcGF0aCwgJ3crJykKZi53cml0ZShteWFwcF93c2dpKQpm
 LmNsb3NlCnByaW50KGYnV3JvdGUge215YXBwX3dzZ2lfcGF0aH0nKQo=" | base64 --decode > /home/$USER/apps/$APPNAME/tmp/$APPNAME-generator.py
 /usr/bin/python3.6 /home/$USER/apps/$APPNAME/tmp/$APPNAME-generator.py
+rm -f /home/$USER/apps/$APPNAME/tmp/$APPNAME-generator.py
 
 chmod +x /home/$USER/apps/$APPNAME/start
 chmod +x /home/$USER/apps/$APPNAME/kill
