@@ -176,7 +176,7 @@ def main():
     # comment out DATABASES
     cmd = f'''sed -i "/^DATABASES =/, /^}$/ s/^/#/" {appdir}/myproject/myproject/settings.py'''
     doit = run_command(cmd)
-    logging.info(f'Wrote initial Django config to {appdir}/myproject/myproject/settings.py
+    logging.info(f'Wrote initial Django config to {appdir}/myproject/myproject/settings.py')
 
     # uwsgi config
     uwsgi_conf = textwrap.dedent(f'''\
