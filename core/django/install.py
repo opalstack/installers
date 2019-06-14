@@ -99,8 +99,7 @@ def gen_password(length=20):
 def run_command(cmd):
     """runs a command, returns output"""
     logging.info(f'Running: {cmd}')
-    #return subprocess.check_output(shlex.split(cmd))
-    return subprocess.check_output(cmd, shell=True)
+    return subprocess.check_output(shlex.split(cmd),stderr=subprocess.PIPE)
 
 def add_cronjob(cronjob):
     """appends a cron job to the user's crontab"""
