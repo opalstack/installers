@@ -258,7 +258,9 @@ def main():
                 1. Connect your Django application to a site route in the control panel.
 
                 2. Edit {appdir}/myproject/myproject/settings.py to set ALLOWED_HOSTS
-                   to include your site's domains.
+                   to include your site's domains. Example:
+
+                       ALLOWED_HOSTS = ['domain.com', 'www.domain.com']
 
                 3. Run the following commands to restart your Django instance:
 
