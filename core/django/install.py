@@ -169,6 +169,15 @@ def main():
     doit = run_command(cmd)
     logging.info(f'Populated Django project directory {appdir}/myproject')
 
+    # django config
+    # set ALLOWED_HOSTS
+    cmd = f'''sed -i "s/^ALLOWED_HOSTS = \[\]/ALLOWED_HOSTS = \['\*'\]/" {appdir}/myproject/myproject/settings.py'''
+    doit = run_command(cmd)
+    # comment out DATABASES
+    cmd = f'''sed -i "/^DATABASES =/, /^}$/ s/^/#/" {appdir}/myproject/myproject/settings.py'''
+    doit = run_command(cmd)
+    logging.info(f'Wrote initial Django config to {appdir}/myproject/myproject/settings.py
+
     # uwsgi config
     uwsgi_conf = textwrap.dedent(f'''\
                 [uwsgi]
