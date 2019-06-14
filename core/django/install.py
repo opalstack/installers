@@ -10,6 +10,7 @@ import textwrap
 import secrets
 import string
 import subprocess
+import shlex
 from urllib.parse import urlparse
 
 API_HOST = 'my.opalstack.com'
@@ -98,7 +99,7 @@ def gen_password(length=20):
 def run_command(cmd):
     """runs a command, returns output"""
     logging.info(f'Running: {cmd}')
-    return subprocess.check_output(cmd.split())
+    return subprocess.check_output(shlex.split(cmd))
 
 def add_cronjob(cronjob):
     """appends a cron job to the user's crontab"""
@@ -171,10 +172,10 @@ def main():
 
     # django config
     # set ALLOWED_HOSTS
-    cmd = f'''sed -i "s/^ALLOWED_HOSTS = \[\]/ALLOWED_HOSTS = \['\*'\]/" {appdir}/myproject/myproject/settings.py'''
+    cmd = f'''sed -r -i "s/^ALLOWED_HOSTS = \[\]/ALLOWED_HOSTS = \['\*'\]/" {appdir}/myproject/myproject/settings.py'''
     doit = run_command(cmd)
     # comment out DATABASES
-    cmd = f'''sed -i "/^DATABASES =/, /^}}$/ s/^/#/" {appdir}/myproject/myproject/settings.py'''
+    cmd = f'''sed -r -i "/^DATABASES =/, /^}}$/ s/^/#/" {appdir}/myproject/myproject/settings.py'''
     doit = run_command(cmd)
     logging.info(f'Wrote initial Django config to {appdir}/myproject/myproject/settings.py')
 
