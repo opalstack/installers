@@ -99,7 +99,11 @@ def gen_password(length=20):
 def run_command(cmd):
     """runs a command, returns output"""
     logging.info(f'Running: {cmd}')
-    return subprocess.check_output(shlex.split(cmd),stderr=subprocess.PIPE)
+    try:
+        result = subprocess.check_output(shlex.split(cmd))
+    except subprocess.CalledProcessError, e:
+        logging.debug(e.output)
+    return result
 
 def add_cronjob(cronjob):
     """appends a cron job to the user's crontab"""
@@ -134,7 +138,7 @@ def main():
     args = parser.parse_args()
 
     # init logging
-    logging.basicConfig(level=logging.INFO,
+    logging.basicConfig(level=logging.DEBUG,
                         format='[%(asctime)s] %(levelname)s: %(message)s')
     # go!
     logging.info(f'Started installation of Django app {args.app_name}')
