@@ -16,6 +16,7 @@ from urllib.parse import urlparse
 API_HOST = 'my.opalstack.com'
 API_BASE_URI = '/api/v0'
 GITEA_URL = 'https://dl.gitea.io/gitea/1.8/gitea-1.8-linux-amd64'
+CMD_ENV = {'PATH': '/usr/local/bin:/usr/bin:/bin','UMASK': '0002',}
 
 
 class OpalstackAPITool():
@@ -96,7 +97,7 @@ def gen_password(length=20):
     return ''.join(secrets.choice(chars) for i in range(length))
 
 
-def run_command(cmd):
+def run_command(cmd, env=CMD_ENV):
     """runs a command, returns output"""
     logging.info(f'Running: {cmd}')
     try:
@@ -149,8 +150,6 @@ def main():
     # debugging
     doit = run_command('env')
     logging.info(doit)
-    exit
-
 
     # create tmp dir
     os.mkdir(f'{appdir}/tmp', 0o700)
