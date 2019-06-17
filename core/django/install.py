@@ -101,7 +101,7 @@ def run_command(cmd, env=CMD_ENV):
     """runs a command, returns output"""
     logging.info(f'Running: {cmd}')
     try:
-        result = subprocess.check_output(shlex.split(cmd))
+        result = subprocess.check_output(shlex.split(cmd), env=env)
     except subprocess.CalledProcessError as e:
         logging.debug(e.output)
     return result
