@@ -99,7 +99,11 @@ def gen_password(length=20):
 def run_command(cmd, env=CMD_ENV):
     """runs a command, returns output"""
     logging.info(f'Running: {cmd}')
-    return subprocess.check_output(cmd.split(), env=env)
+    try:
+        result = subprocess.check_output(shlex.split(cmd), env=env)
+    except subprocess.CalledProcessError as e:
+        logging.debug(e.output)
+    return result
 
 def add_cronjob(cronjob):
     """appends a cron job to the user's crontab"""
