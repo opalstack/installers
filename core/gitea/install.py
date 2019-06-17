@@ -147,6 +147,8 @@ def main():
     logging.info(f'Started installation of Gitea app {args.app_name}')
     api = OpalstackAPITool(API_HOST, API_BASE_URI, args.opal_token, args.opal_user, args.opal_password)
     appinfo = api.get(f'/app/read/{args.app_uuid}')
+    CMD_ENV['HOME'] = f'/home/{appinfo["app_user"]}'
+    CMD_ENV['USER'] = appinfo['app_user']
     appdir = f'/home/{appinfo["app_user"]}/apps/{appinfo["name"]}'
     os.mkdir(f'{appdir}/bin', 0o700)
     os.mkdir(f'{appdir}/custom', 0o700)
