@@ -15,7 +15,6 @@ from urllib.parse import urlparse
 
 API_HOST = 'my.opalstack.com'
 API_BASE_URI = '/api/v0'
-GITEA_URL = 'https://dl.gitea.io/gitea/1.8/gitea-1.8-linux-amd64'
 CMD_ENV = {'PATH': '/usr/local/bin:/usr/bin:/bin','UMASK': '0002',}
 
 
