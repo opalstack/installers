@@ -102,9 +102,11 @@ def run_command(cmd, env=CMD_ENV):
     logging.info(f'Running: {cmd}')
     try:
         result = subprocess.check_output(shlex.split(cmd), env=env)
+        logging.
     except subprocess.CalledProcessError as e:
         logging.debug(e.output)
     return result
+
 
 def add_cronjob(cronjob):
     """appends a cron job to the user's crontab"""
@@ -139,7 +141,7 @@ def main():
     args = parser.parse_args()
 
     # init logging
-    logging.basicConfig(level=logging.INFO,
+    logging.basicConfig(level=logging.DEBUG,
                         format='[%(asctime)s] %(levelname)s: %(message)s')
     # go!
     logging.info(f'Started installation of Gitea app {args.app_name}')
