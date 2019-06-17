@@ -158,6 +158,7 @@ def main():
     # install uwsgi
     cmd = f'{appdir}/env/bin/pip install uwsgi'
     doit = run_command(cmd)
+    perms = run_command(f'chmod 700 {appdir}/env/bin/uwsgi')
     logging.info('Installed latest uWSGI into virtualenv')
 
     # install django
