@@ -10,6 +10,7 @@ import textwrap
 import secrets
 import string
 import subprocess
+import shlex
 from urllib.parse import urlparse
 
 API_HOST = 'my.opalstack.com'
