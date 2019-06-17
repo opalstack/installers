@@ -141,7 +141,7 @@ def main():
     args = parser.parse_args()
 
     # init logging
-    logging.basicConfig(level=logging.DEBUG,
+    logging.basicConfig(level=logging.INFO,
                         format='[%(asctime)s] %(levelname)s: %(message)s')
     # go!
     logging.info(f'Started installation of Gitea app {args.app_name}')
