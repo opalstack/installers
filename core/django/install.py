@@ -147,10 +147,6 @@ def main():
     appinfo = api.get(f'/app/read/{args.app_uuid}')
     appdir = f'/home/{appinfo["app_user"]}/apps/{appinfo["name"]}'
 
-    # debugging
-    doit = run_command('env')
-    logging.info(doit)
-
     # create tmp dir
     os.mkdir(f'{appdir}/tmp', 0o700)
     logging.info(f'Created directory {appdir}/tmp')
