@@ -170,6 +170,6 @@ else
     firstLine=`echo "${coreinstall}" | head -1`
     echo $firstLine
     # Send JSON installed OK.
-    /usr/bin/curl -s -X POST --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN" -d'{"id": "'"$UUID"'", "installed_ok":"True", "note":"'"$firstLine"'"}' https://my.opalstack.com/api/v0/app/installed_ok/
+    /usr/bin/curl -s -X POST --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN" -d'{"id": "'"$UUID"'", "installed_ok":"True", "note":"'Admin user: $USER / "$firstLine"'"}' https://my.opalstack.com/api/v0/app/installed_ok/
 
 fi;
