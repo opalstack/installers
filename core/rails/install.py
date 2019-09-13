@@ -174,7 +174,7 @@ def main():
                 fi
 
                 cd $PROJECTDIR
-                GEM_HOME={appdir}/env $PROJECTDIR/bin/bundle exec puma -p 17287 -d
+                GEM_HOME={appdir}/env $PROJECTDIR/bin/bundle exec puma -p {appinfo["port"]} -d
 
                 echo "Started Rails for {appinfo["name"]}."
                 ''')
