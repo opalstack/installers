@@ -1,4 +1,4 @@
-#! /usr/bin/python36
+#! /usr/bin/python3.6
 
 import argparse
 import sys
@@ -151,7 +151,7 @@ def main():
     logging.info(f'Created directory {appdir}/tmp')
 
     # create virtualenv
-    cmd = f'/bin/python36 -m venv {appdir}/env'
+    cmd = f'/bin/python3.6 -m venv {appdir}/env'
     doit = run_command(cmd)
     logging.info(f'Created virtualenv at {appdir}/env')
 
