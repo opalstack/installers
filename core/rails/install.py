@@ -134,7 +134,8 @@ def main():
     api = OpalstackAPITool(API_HOST, API_BASE_URI, args.opal_token, args.opal_user, args.opal_password)
     appinfo = api.get(f'/app/read/{args.app_uuid}')
     appdir = f'/home/{appinfo["app_user"]}/apps/{appinfo["name"]}'
-    CMD_ENV = {'PATH': f'{appdir}/myproject/bin:{appdir}/env/bin:/usr/local/bin:/usr/bin:/bin',
+    CMD_ENV = {'PATH': f'/opt/bin:{appdir}/myproject/bin:{appdir}/env/bin:/usr/local/bin:/usr/bin:/bin',
+               'LD_LIBRARY_PATH': '/opt/lib',
                'TMPDIR': f'{appdir}/tmp',
                'GEM_HOME': f'{appdir}/env',
                'UMASK': '0002',}
@@ -153,7 +154,7 @@ def main():
     doit = run_command(cmd, cwd=f'{appdir}', env=CMD_ENV)
 
     # make rails project
-    cmd = f'rails new myproject --skip-active-record'
+    cmd = f'rails new myproject'
     doit = run_command(cmd, cwd=f'{appdir}', env=CMD_ENV)
     os.mkdir(f'{appdir}/myproject/tmp/pids')
 
@@ -165,7 +166,7 @@ def main():
                 PROJECTDIR='{appdir}/myproject'
 
                 # no need to edit below this line
-                PATH=$PROJECTDIR/bin:{appdir}/env/bin:$PATH
+                PATH=/opt/bin:$PROJECTDIR/bin:{appdir}/env/bin:$PATH
                 PIDFILE="$PROJECTDIR/tmp/pids/server.pid"
 
                 if [ -e "$PIDFILE" ] && (pgrep -u {appinfo["app_user"]} | grep -x -f $PIDFILE &> /dev/null); then
@@ -174,7 +175,7 @@ def main():
                 fi
 
                 cd $PROJECTDIR
-                GEM_HOME={appdir}/env $PROJECTDIR/bin/bundle exec puma -p {appinfo["port"]} -d
+                LD_LIBRARY_PATH=/opt/lib GEM_HOME={appdir}/env $PROJECTDIR/bin/bundle exec puma -p {appinfo["port"]} -d
 
                 echo "Started Rails for {appinfo["name"]}."
                 ''')
