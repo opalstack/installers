@@ -190,7 +190,6 @@ def main():
                 master = True
                 http = 127.0.0.1:{appinfo["port"]}
                 virtualenv = {appdir}/env/
-                env = LD_LIBRARY_PATH={appdir}/env/lib
                 daemonize = /home/{appinfo["app_user"]}/logs/{appinfo["name"]}/uwsgi.log
                 pidfile = {appdir}/tmp/uwsgi.pid
                 workers = 2
