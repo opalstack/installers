@@ -1,14 +1,14 @@
 # HOWTO install and run Discourse on Opalstack
 
-1. Discourse uses a lot of memory, so you'll need to have either a 2GB VPS plan or a double-stack Shared 1GB plan (2 plans on 1 box). Contact support to request the upgrade.
+1. **Discourse uses a lot of memory, so you'll need to have either a 2GB VPS plan or a double-stack Shared 1GB plan (2 plans on 1 box). Contact support to request the upgrade.**
 2. Create a new PostgreSQL database and user, and make a note of database's name, username, and password.
-3. Open a support ticket to request that the `hstore` and `pg_trgm` extensions be enabled for on your new database for Discourse (be sure to include the DB name in the request). Do not skip this step!
+3. Open a support ticket to request that the `hstore` and `pg_trgm` extensions be enabled for on your new database for Discourse (be sure to include the DB name in the request).
 4. Create a new mail user and make a note of the mail user name and password.
 5. Create a new shell user if desired for your application. You can use one of your existing shell users if you like. The remainder of this example will use `your_shell_user` as the shell user name.
-6. Create a new Proxy Port application owned by the shell user from step 3. The remainder of this procedure will use `discourse_app` as the app name. Make a note of the port assigned to the application. The rest of this procedure assumes that the app is running on port 55551.
-7. Create a new Proxy Port application owned by the shell user from step 3. The remainder of this procedure will use `discourse_redis` as the app name. Make a note of the port assigned to the application. The rest of this procedure assumes that the app is running on port 55552.
-8. Create a new "Nginx Static Only (Symbolic Link)" application owned by the shell user from step 3. The remainder of this procedure will use `discourse_assets` as the app name. The symbolic link path should be `/home/your_shell_user/apps/discourse_app/discourse/public/assets/` but adjusted for your actual shell user and app names.
-9. Create a new "Nginx Static Only (Symbolic Link)" application owned by the shell user from step 3. The remainder of this procedure will use `discourse_images` as the app name. The symbolic link path should be `/home/your_shell_user/apps/discourse_app/discourse/public/images/` but adjusted for your actual shell user and app names.
+6. Create a new Proxy Port application owned by the shell user from step 5. The remainder of this procedure will use `discourse_app` as the app name. Make a note of the port assigned to the application. The rest of this procedure assumes that the app is running on port 55551.
+7. Create a new Proxy Port application owned by the shell user from step 5. The remainder of this procedure will use `discourse_redis` as the app name. Make a note of the port assigned to the application. The rest of this procedure assumes that the app is running on port 55552.
+8. Create a new "Nginx Static Only (Symbolic Link)" application owned by the shell user from step 5. The remainder of this procedure will use `discourse_assets` as the app name. The symbolic link path should be `/home/your_shell_user/apps/discourse_app/discourse/public/assets/` but adjusted for your actual shell user and app names.
+9. Create a new "Nginx Static Only (Symbolic Link)" application owned by the shell user from step 5. The remainder of this procedure will use `discourse_images` as the app name. The symbolic link path should be `/home/your_shell_user/apps/discourse_app/discourse/public/images/` but adjusted for your actual shell user and app names.
 10. Create a new site with the following routes:
     - discourse_app on /
     - discourse_assets on /assets
