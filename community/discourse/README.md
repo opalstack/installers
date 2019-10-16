@@ -25,6 +25,8 @@
     chmod 700 install_discourse.sh
     ./install_discourse.sh
     ```
+14. Enter your initial Discourse admin user credentials when prompted at the command line.
+
 When the installation is complete, Discourse (along with Redis and sidekiq) should be running and accessible on your site URL.
 
 The commands to control everything are below - be sure to change `$APP_NAME` to your Discourse app's name:
