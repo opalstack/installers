@@ -88,3 +88,4 @@ RAILS_ENV=production bundle exec pumactl start
 
 # finished!
 echo "Installation complete - Discourse should now be installed and running!"
+echo "Now complete the setup at $SITE_DOMAIN/wizard/"
