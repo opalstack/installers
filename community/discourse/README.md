@@ -27,7 +27,7 @@
     ```
 14. Enter your initial Discourse admin user credentials when prompted at the command line.
 
-When the installation is complete, Discourse (along with Redis and sidekiq) should be running and accessible on your site URL.
+When the installation is complete, Discourse (along with Redis and sidekiq) should be running and accessible on your site URL and you can complete the setup by using the setup wizard link which appears after you log in to Discourse with your admin credentials.
 
 The commands to control everything are below - be sure to change `$APP_NAME` to your Discourse app's name:
 ```
