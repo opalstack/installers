@@ -172,6 +172,7 @@ def main():
                 export TMPDIR={appdir}/tmp
                 mkdir -p {appdir}/tmp
                 PIDFILE="{appdir}/tmp/node.pid"
+                NODE=/bin/node
 
                 if [ -e "$PIDFILE" ] && (pgrep -u {appinfo["app_user"]} | grep -x -f $PIDFILE &> /dev/null); then
                   echo "Node.js for {appinfo["name"]} already running."
@@ -179,8 +180,7 @@ def main():
                 fi
 
                 cd {appdir}
-                node app.js >> ~/logs/{appinfo["name"]}/{appinfo["name"]}.log 2>&1 &
-                echo -n $! > $PIDFILE
+                /usr/sbin/daemonize -c {appdir} -e ~/logs/{appinfo["name"]}/node_error.log -o ~/logs/{appinfo["name"]}/node_output.log -p $PIDFILE $NODE app.js
 
                 echo "Started Node.js for {appinfo["name"]}."
                 ''')
