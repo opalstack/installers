@@ -82,9 +82,9 @@ echo "Almost done! Please follow the prompts to create your initial admin user:"
 RAILS_ENV=production bundle exec rake admin:create
 
 # start sidekiq
-RAILS_ENV=production bundle exec sidekiq -d -L $HOME/logs/$DISCOURSE_APP_NAME/sidekiq.log -P $HOME/apps/$DISCOURSE_APP_NAME/discourse/tmp/pids/sidekiq.pid
+RAILS_ENV=production  RACK_ENV=production bundle exec sidekiq -d -L $HOME/logs/$DISCOURSE_APP_NAME/sidekiq.log -P $HOME/apps/$DISCOURSE_APP_NAME/discourse/tmp/pids/sidekiq.pid
 # start puma & discourse
-RAILS_ENV=production bundle exec pumactl start
+RAILS_ENV=production RACK_ENV=production bundle exec pumactl start
 
 # finished!
 echo "Installation complete - Discourse should now be installed and running!"
