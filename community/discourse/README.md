@@ -39,17 +39,17 @@ kill `cat $HOME/apps/$APP_NAME/tmp/redis.pid`
 
 # start sidekiq
 cd  $HOME/apps/$APP_NAME/discourse
-RAILS_ENV=production bundle exec sidekiq -d -L $HOME/logs/$APP_NAME/sidekiq.log -P $HOME/apps/$APP_NAME/discourse/tmp/pids/sidekiq.pid
+RAILS_ENV=production RACK_ENV=production bundle exec sidekiq -d -L $HOME/logs/$APP_NAME/sidekiq.log -P $HOME/apps/$APP_NAME/discourse/tmp/pids/sidekiq.pid
 
 # stop sidekiq
 cd  $HOME/apps/$APP_NAME/discourse
-RAILS_ENV=production bundle exec sidekiqctl stop tmp/pids/sidekiq.pid
+RAILS_ENV=production RACK_ENV=production bundle exec sidekiqctl stop tmp/pids/sidekiq.pid
 
 # start discourse
 cd  $HOME/apps/$APP_NAME/discourse
-RAILS_ENV=production bundle exec pumactl start
+RAILS_ENV=production RACK_ENV=production bundle exec pumactl start
 
 # stop discourse
 cd  $HOME/apps/$APP_NAME/discourse
-RAILS_ENV=production bundle exec pumactl stop
+RAILS_ENV=production RACK_ENV=production bundle exec pumactl stop
 ```
