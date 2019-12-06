@@ -1,9 +1,9 @@
 #! /bin/bash
 # Opalstack Wordpress installer.
 # Takes token and app info, creates a MySQL DB and DBUSER and provies the info as vars.
-# Order of operations best practice, 
+# Order of operations best practice,
 # First external downloads. Tarballs, zips, archives, external libraries.
-# Second api calls to Opalstack control, DB creation, Port creation, etc. 
+# Second api calls to Opalstack control, DB creation, Port creation, etc.
 # Last logic to create the application. Shell commands to build and install.
 
 CRED2='\033[1;91m'        # Red
@@ -30,13 +30,13 @@ printf 'Started at %(%F %T)T\n' >> /home/$USER/logs/$APPNAME/install.log
 if [ -z $UUID ] || [ -z $OPAL_TOKEN ] || [ -z $APPNAME ]
 then
      printf $CRED2
-     echo 'This command requires the following parameters to function, 
+     echo 'This command requires the following parameters to function,
      -i App UUID, used to make API calls to control panel.
      -n Application NAME, must match the name in the control panel
-      {$OPAL_TOKEN} Control panel token, used to authenticate to the API. 
+      {$OPAL_TOKEN} Control panel token, used to authenticate to the API.
      '
      exit 1
-else    
+else
     # Get the server's UUID and verify the app exists, and thus the file schema exists.
     if serverjson=`curl -s --fail --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN"  https://my.opalstack.com/api/v0/app/read/$UUID` ;then
          printf $CGREEN2
@@ -49,7 +49,7 @@ else
          exit 1
     fi;
 
-    # Get the the account email address for wp install. 
+    # Get the the account email address for wp install.
     if accountjson=`curl -s --fail --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN"  https://my.opalstack.com/api/v0/account/info/` ;then
          printf $CGREEN2
          echo 'Admin email lookup OK.'
@@ -83,10 +83,10 @@ else
     echo $DBNAME
     echo $DBUSER
 
-    echo "waiting for 20 seconds so the DB and DBUser can be created"
-    sleep 20
-    
-    # check if the DB has been installed, initial request. 
+    echo "waiting for 10 seconds so the DB and DBUser can be created"
+    sleep 10
+
+    # check if the DB has been installed, initial request.
     if DBOKJSON=`curl -s --fail --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN"  https://my.opalstack.com/api/v0/mariadb/read/$DBID` ;then
          printf $CYELLOW2
          echo 'DB lookup.'
@@ -97,7 +97,7 @@ else
          echo 'DB lookup failed.'
          exit 1
     fi;
-    
+
     # Iterate until DBOK True
     while [ $DBOK  == "False" ]
     do
@@ -114,12 +114,12 @@ else
          echo 'DB lookup failed.'
     fi;
     done
-    
+
     printf $CGREEN2
     echo 'DB lookup OK.'
     printf $CEND
-    
-    # check if the DB USER has been installed, initial request. 
+
+    # check if the DB USER has been installed, initial request.
     if DBUOKJSON=`curl -s --fail --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN"  https://my.opalstack.com/api/v0/mariauser/read/$DBUSERID` ;then
          printf $CYELLOW2
          echo 'DB User lookup.'
@@ -130,7 +130,7 @@ else
          echo 'DB User lookup failed.'
          exit 1
     fi;
-    
+
     # Iterate until DBUOK True
     while [ $DBUOK  == "False" ]
     do
@@ -153,15 +153,15 @@ else
     printf $CEND
 
     # have to do this to be sure the DBs have permissions, which can take 60 seconds after db creation.
-    sleep 65
-    
+    sleep 10
+
     # Install wp-cli
     echo 'WP CLI init'
     /bin/mkdir -p $HOME/bin/
     /bin/wget https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar -O $HOME/bin/wp
     /bin/chmod +x $HOME/bin/wp
 
-    # use wp-cli to install wordpress, 
+    # use wp-cli to install wordpress,
     $HOME/bin/wp cli update
     $HOME/bin/wp core download --path=/home/$USER/apps/$APPNAME
     $HOME/bin/wp core config --dbhost=localhost --dbname=$DBNAME --dbuser=$DBUSER --dbpass=$DBPWD --path=/home/$USER/apps/$APPNAME
