@@ -99,7 +99,7 @@ else
     fi;
 
     # Iterate until DBOK True
-    while [ $DBOK  == False ]
+    while [ $DBOK  == "False" ]
     do
     echo $DBOK
 
@@ -132,7 +132,7 @@ else
     fi;
 
     # Iterate until DBUOK True
-    while [ $DBUOK  == False ]
+    while [ $DBUOK  == "False" ]
     do
     echo $DBUOK
 
@@ -170,6 +170,6 @@ else
     firstLine=`echo "${coreinstall}" | head -1`
     echo $firstLine
     # Send JSON installed OK.
-    /usr/bin/curl -s -X POST --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN" -d'{"id": "'"$UUID"'", "installed_ok":"True", "note":"'"Admin user: $USER / $firstLine"'"}' https://my.opalstack.com/api/v0/app/installed_ok/
+    /usr/bin/curl -s -X POST --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN" -d'{"id": "'"$UUID"'", "installed_ok":true, "note":"'"Admin user: $USER / $firstLine"'"}' https://my.opalstack.com/api/v0/app/installed_ok/
 
 fi;
