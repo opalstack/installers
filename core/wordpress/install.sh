@@ -99,7 +99,7 @@ else
     fi;
 
     # Iterate until DBOK True
-    while [ $DBOK  == "False" ]
+    while [ $DBOK  == false ]
     do
     echo $DBOK
 
@@ -132,7 +132,7 @@ else
     fi;
 
     # Iterate until DBUOK True
-    while [ $DBUOK  == "False" ]
+    while [ $DBUOK  == false ]
     do
     echo $DBUOK
 
