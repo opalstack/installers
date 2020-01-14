@@ -114,5 +114,5 @@ cline="*/10 * * * * /home/$USER/apps/$APPNAME/start"
 (crontab -l; echo "$cline" ) | crontab -
 
 # add installed OK
-appok='{"id": "'"$UUID"'", "installed_ok":"True" }'
+appok='{"id": "'"$UUID"'", "installed_ok":true }'
 /usr/bin/curl -s -X POST --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN" -d"$appok" https://my.opalstack.com/api/v0/app/installed_ok/
