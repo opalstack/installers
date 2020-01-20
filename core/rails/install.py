@@ -138,7 +138,8 @@ def main():
                'LD_LIBRARY_PATH': '/opt/lib',
                'TMPDIR': f'{appdir}/tmp',
                'GEM_HOME': f'{appdir}/env',
-               'UMASK': '0002',}
+               'UMASK': '0002',
+               'HOME': '/home/{appinfo["app_user"]}',}
 
     # make dirs env and tmp
     os.mkdir(f'{appdir}/env')
