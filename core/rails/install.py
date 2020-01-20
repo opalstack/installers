@@ -4,6 +4,7 @@ import argparse
 import sys
 import logging
 import os
+import os.path
 import http.client
 import json
 import textwrap
@@ -157,7 +158,9 @@ def main():
     # make rails project
     cmd = f'rails new myproject'
     doit = run_command(cmd, cwd=f'{appdir}', env=CMD_ENV)
-    os.mkdir(f'{appdir}/myproject/tmp/pids')
+    pid_dir = f'{appdir}/myproject/tmp/pids'
+    if not os.path.isdir(pid_dir):
+        os.mkdir(pid_dir)
 
     # start script
     start_script = textwrap.dedent(f'''\
