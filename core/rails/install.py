@@ -140,7 +140,7 @@ def main():
                'TMPDIR': f'{appdir}/tmp',
                'GEM_HOME': f'{appdir}/env',
                'UMASK': '0002',
-               'HOME': '/home/{appinfo["app_user"]}',}
+               'HOME': f'/home/{appinfo["app_user"]}',}
 
     # make dirs env and tmp
     os.mkdir(f'{appdir}/env')
