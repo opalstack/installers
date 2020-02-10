@@ -153,7 +153,7 @@ else
     printf $CEND
 
     # have to do this to be sure the DBs have permissions, which can take 60 seconds after db creation.
-    sleep 10
+    sleep 20
 
     # Install wp-cli
     echo 'WP CLI init'
