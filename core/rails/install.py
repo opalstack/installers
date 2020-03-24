@@ -162,6 +162,10 @@ def main():
     if not os.path.isdir(pid_dir):
         os.mkdir(pid_dir)
 
+    # DELETEME when rails no longer ships broken webpack
+    cmd = f'''/bin/sed -i -e 's/check_yarn_integrity: true/check_yarn_integrity: false/' {appdir}/myproject/config/webpacker.yml'''
+    doit = run_command(cmd, cwd=f'{appdir}', env=CMD_ENV)
+
     # start script
     start_script = textwrap.dedent(f'''\
                 #!/bin/bash
