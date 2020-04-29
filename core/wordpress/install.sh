@@ -39,7 +39,7 @@ then
      exit 1
 else
     # Get the server's UUID and verify the app exists, and thus the file schema exists.
-    if serverjson=`curl -s --fail --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN"  https://my.opalstack.com/api/v0/app/read/$UUID` ;then
+    if serverjson=`curl -s --fail --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN"  https://$API_URL/api/v0/app/read/$UUID` ;then
          printf $CGREEN2
          echo 'UUID validation and server lookup OK.'
          printf $CEND
@@ -51,7 +51,7 @@ else
     fi;
 
     # Get the the account email address for wp install.
-    if accountjson=`curl -s --fail --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN"  https://my.opalstack.com/api/v0/account/info/` ;then
+    if accountjson=`curl -s --fail --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN"  https://$API_URL/api/v0/account/info/` ;then
          printf $CGREEN2
          echo 'Admin email lookup OK.'
          printf $CEND
@@ -65,7 +65,7 @@ else
 
     # create database
     dbsend='{"name": "'"$APPNAME"'", "server": "'"$serverid"'" }'
-    if dbjson=`curl -s --fail --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN" -d"$dbsend"  https://my.opalstack.com/api/v0/mariadb/autoadd/` ;then
+    if dbjson=`curl -s --fail --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN" -d"$dbsend"  https://$API_URL/api/v0/mariadb/autoadd/` ;then
          export $(echo $dbjson| jq -r '@sh "DBNAME=\(.name) CHARSET=\(.charset) DBID=\(.id) DBUSERID=\(.dbuserid) DBUSER=\(.dbuser) DBPWD=\(.default_password) SERVER=\(.server)"' )
          printf $CGREEN2
          echo 'DB creation OK.'
@@ -88,7 +88,7 @@ else
     sleep 10
 
     # check if the DB has been installed, initial request.
-    if DBOKJSON=`curl -s --fail --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN"  https://my.opalstack.com/api/v0/mariadb/read/$DBID` ;then
+    if DBOKJSON=`curl -s --fail --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN"  https://$API_URL/api/v0/mariadb/read/$DBID` ;then
          printf $CYELLOW2
          echo 'DB lookup.'
          printf $CEND
@@ -105,7 +105,7 @@ else
     echo $DBOK
 
     sleep 5
-    if DBOKJSON=`curl -s --fail --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN"  https://my.opalstack.com/api/v0/mariadb/read/$DBID` ;then
+    if DBOKJSON=`curl -s --fail --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN"  https://$API_URL/api/v0/mariadb/read/$DBID` ;then
          printf $CYELLOW2
          echo 'DB lookup.'
          printf $CEND
@@ -121,7 +121,7 @@ else
     printf $CEND
 
     # check if the DB USER has been installed, initial request.
-    if DBUOKJSON=`curl -s --fail --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN"  https://my.opalstack.com/api/v0/mariauser/read/$DBUSERID` ;then
+    if DBUOKJSON=`curl -s --fail --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN"  https://$API_URL/api/v0/mariauser/read/$DBUSERID` ;then
          printf $CYELLOW2
          echo 'DB User lookup.'
          printf $CEND
@@ -138,7 +138,7 @@ else
     echo $DBUOK
 
     sleep 5
-    if DBUOKJSON=`curl -s --fail --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN"  https://my.opalstack.com/api/v0/mariauser/read/$DBUSERID` ;then
+    if DBUOKJSON=`curl -s --fail --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN"  https://$API_URL/api/v0/mariauser/read/$DBUSERID` ;then
          printf $CYELLOW2
          echo 'DB User lookup.'
          printf $CEND
@@ -171,6 +171,6 @@ else
     firstLine=`echo "${coreinstall}" | head -1`
     echo $firstLine
     # Send JSON installed OK.
-    /usr/bin/curl -s -X POST --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN" -d'{"id": "'"$UUID"'", "installed_ok":true, "note":"'"Admin user: $USER / $firstLine"'"}' https://my.opalstack.com/api/v0/app/installed_ok/
+    /usr/bin/curl -s -X POST --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN" -d'{"id": "'"$UUID"'", "installed_ok":true, "note":"'"Admin user: $USER / $firstLine"'"}' https://$API_URL/api/v0/app/installed_ok/
 
 fi;
