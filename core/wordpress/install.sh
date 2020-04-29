@@ -5,6 +5,7 @@
 # First external downloads. Tarballs, zips, archives, external libraries.
 # Second api calls to Opalstack control, DB creation, Port creation, etc.
 # Last logic to create the application. Shell commands to build and install.
+# THIS LINE
 
 CRED2='\033[1;91m'        # Red
 CGREEN2='\033[1;92m'      # Green
