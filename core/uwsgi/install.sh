@@ -34,7 +34,7 @@ then
      exit 1
 else
     # Get the port and verify the app exists, and thus the file schema exists.
-    if serverjson=`curl -s --fail --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN"  https://my.opalstack.com/api/v0/app/read/$UUID` ;then
+    if serverjson=`curl -s --fail --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN"  https://$API_URL/api/v0/app/read/$UUID` ;then
          printf $CGREEN2
          echo 'UUID validation and server lookup OK.'
          printf $CEND
@@ -115,4 +115,4 @@ cline="*/10 * * * * /home/$USER/apps/$APPNAME/start"
 
 # add installed OK
 appok='{"id": "'"$UUID"'", "installed_ok":true }'
-/usr/bin/curl -s -X POST --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN" -d"$appok" https://my.opalstack.com/api/v0/app/installed_ok/
+/usr/bin/curl -s -X POST --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN" -d"$appok" https://$API_URL/api/v0/app/installed_ok/
