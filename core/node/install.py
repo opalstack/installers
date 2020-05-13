@@ -14,7 +14,7 @@ import shlex
 import random
 from urllib.parse import urlparse
 
-API_HOST = os.environ.get('API_URL')
+API_HOST = os.environ.get('API_URL').strip('https://').strip('http://')
 API_BASE_URI = '/api/v0'
 CMD_ENV = {'PATH': '/usr/local/bin:/usr/bin:/bin','UMASK': '0002',}
 
