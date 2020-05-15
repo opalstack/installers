@@ -25,15 +25,15 @@ printf 'Started at %(%F %T)T\n' >> /home/$USER/logs/$APPNAME/install.log
 if [ -z $UUID ] || [ -z $OPAL_TOKEN ] || [ -z $APPNAME ]
 then
      printf $CRED2
-     echo 'This command requires the following parameters to function, 
+     echo 'This command requires the following parameters to function,
      -i App UUID, used to make API calls to control panel.
-     -t Control panel TOKEN, used to authenticate to the API. 
+     -t Control panel TOKEN, used to authenticate to the API.
      -n Application NAME, must match the name in the control panel
      '
      exit 1
-else    
+else
     # Get the server's UUID and verify the app exists, and thus the file schema exists.
-    if serverjson=`curl -s --fail --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN"  https://my.opalstack.com/api/v0/app/read/$UUID` ;then
+    if serverjson=`curl -s --fail --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN"  https://$API_URL/api/v0/app/read/$UUID` ;then
          printf $CGREEN2
          echo 'UUID validation and server lookup OK.'
          printf $CEND
