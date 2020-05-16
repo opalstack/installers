@@ -249,9 +249,9 @@ def main():
 
     # finished, push a notice
     msg = f'Post-install configuration is required, see README in app directory for more info.'
-    payload = json.dumps({'id': args.app_uuid, 'installed_ok': True,
+    payload = json.dumps({'id': args.app_uuid, 'init_created': True,
                           'note': msg})
-    finished=api.post('/app/installed_ok/', payload)
+    finished=api.post('/app/init_created/', payload)
 
     logging.info(f'Completed installation of Ghost app {args.app_name}')
 
