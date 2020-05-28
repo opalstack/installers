@@ -92,7 +92,7 @@ else
          printf $CYELLOW2
          echo 'DB lookup.'
          printf $CEND
-         DBOK=`echo $DBOKJSON | jq -r .installed_ok`
+         DBOK=`echo $DBOKJSON | jq -r .ready`
     else
          printf $CRED2
          echo 'DB lookup failed.'
@@ -109,7 +109,7 @@ else
          printf $CYELLOW2
          echo 'DB lookup.'
          printf $CEND
-         DBOK=`echo $DBOKJSON | jq -r .installed_ok`
+         DBOK=`echo $DBOKJSON | jq -r .ready`
     else
          printf $CRED2
          echo 'DB lookup failed.'
@@ -125,7 +125,7 @@ else
          printf $CYELLOW2
          echo 'DB User lookup.'
          printf $CEND
-         DBUOK=`echo $DBUOKJSON | jq -r .installed_ok`
+         DBUOK=`echo $DBUOKJSON | jq -r .ready`
     else
          printf $CRED2
          echo 'DB User lookup failed.'
@@ -142,7 +142,7 @@ else
          printf $CYELLOW2
          echo 'DB User lookup.'
          printf $CEND
-         DBUOK=`echo $DBUOKJSON | jq -r .installed_ok`
+         DBUOK=`echo $DBUOKJSON | jq -r .ready`
     else
          printf $CRED2
          echo 'DB User lookup failed.'
@@ -152,9 +152,6 @@ else
     printf $CGREEN2
     echo 'DB User lookup OK.'
     printf $CEND
-
-    # have to do this to be sure the DBs have permissions, which can take 60 seconds after db creation.
-    sleep 60
 
     # Install wp-cli
     echo 'WP CLI init'
@@ -171,6 +168,6 @@ else
     firstLine=`echo "${coreinstall}" | head -1`
     echo $firstLine
     # Send JSON installed OK.
-    /usr/bin/curl -s -X POST --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN" -d'{"id": "'"$UUID"'", "installed_ok":true, "note":"'"Admin user: $USER / $firstLine"'"}' $API_URL/api/v0/app/installed_ok/
+    /usr/bin/curl -s -X POST --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN" -d'{"id": "'"$UUID"'", "init_created":true, "note":"'"Admin user: $USER / $firstLine"'"}' $API_URL/api/v0/app/init_created/
 
 fi;
