@@ -1,6 +1,6 @@
 # HOWTO install and run Discourse on Opalstack
 
-1. **Discourse uses a lot of memory, so you'll need to have either a 2GB VPS plan or a double-stack Shared 1GB plan (2 plans on 1 box). [Contact support](https://help.opalstack.com/article/9/getting-help) to request the upgrade.**
+1. **Discourse uses a lot of memory, so you'll need to have either a 2GB VPS plan or a Double Stack 2GB plan (2 plans on 1 box). [Contact support](https://help.opalstack.com/article/9/getting-help) to request the upgrade.**
 2. [Create a new PostgreSQL database and user](https://help.opalstack.com/article/51/managing-databases#adding-databases), and make a note of database's name, username, and password.
 3. [Contact support](https://help.opalstack.com/article/9/getting-help) to request that the `hstore` and `pg_trgm` extensions be enabled for on your new database for Discourse (be sure to include the DB name in the request).
 4. [Create a new mail user](https://help.opalstack.com/article/98/managing-mail-users#adding-mail-users) and make a note of the mail user name and password. You can use one of your existing mail users if you like. The remainder of this example will use `your_mail_user` as the mail user name.
