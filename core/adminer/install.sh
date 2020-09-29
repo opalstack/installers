@@ -20,7 +20,7 @@ n) APPNAME=$OPTARG;;
 esac
 done
 
-printf 'Started at %(%F %T)T\n' >> /home/$USER/logs/$APPNAME/install.log
+printf 'Started at %(%F %T)T\n' >> /home/$USER/logs/apps/$APPNAME/install.log
 
 if [ -z $UUID ] || [ -z $OPAL_TOKEN ] || [ -z $APPNAME ]
 then

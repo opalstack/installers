@@ -43,11 +43,11 @@ sed -i -e 's/port 6379/port '"$REDIS_PORT"'/' redis.conf
 
 # change username and app name in next 4 lines to your shell user and discourse app name
 sed -i -e 's/^pidfile \/var\/run\/redis_6379.pid/pidfile \/home\/'"$SHELL_USER"'\/apps\/'"$REDIS_APP_NAME"'\/tmp\/redis.pid/' redis.conf
-sed -i -e 's/^logfile ""/logfile \/home\/'"$SHELL_USER"'\/logs\/'"$REDIS_APP_NAME"'\/redis.log/' redis.conf
+sed -i -e 's/^logfile ""/logfile \/home\/'"$SHELL_USER"'\/logs\/apps\/'"$REDIS_APP_NAME"'\/redis.log/' redis.conf
 sed -i -e 's/daemonize no/daemonize yes/' redis.conf
 
 # start redis
-/home/$SHELL_USER/apps/$REDIS_APP_NAME/redis-stable/src/redis-server /home/$SHELL_USER/apps/$REDIS_APP_NAME/redis-stable/redis.conf 
+/home/$SHELL_USER/apps/$REDIS_APP_NAME/redis-stable/src/redis-server /home/$SHELL_USER/apps/$REDIS_APP_NAME/redis-stable/redis.conf
 
 # install discourse
 cd /home/$SHELL_USER/apps/$DISCOURSE_APP_NAME
@@ -82,7 +82,7 @@ echo "Almost done! Please follow the prompts to create your initial admin user:"
 RAILS_ENV=production bundle exec rake admin:create
 
 # start sidekiq
-RAILS_ENV=production  RACK_ENV=production bundle exec sidekiq -d -L $HOME/logs/$DISCOURSE_APP_NAME/sidekiq.log -P $HOME/apps/$DISCOURSE_APP_NAME/discourse/tmp/pids/sidekiq.pid
+RAILS_ENV=production  RACK_ENV=production bundle exec sidekiq -d -L $HOME/logs/apps/$DISCOURSE_APP_NAME/sidekiq.log -P $HOME/apps/$DISCOURSE_APP_NAME/discourse/tmp/pids/sidekiq.pid
 # start puma & discourse
 RAILS_ENV=production RACK_ENV=production bundle exec pumactl start
 
