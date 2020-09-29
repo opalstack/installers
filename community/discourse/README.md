@@ -12,7 +12,7 @@
 10. [Create a new site](https://help.opalstack.com/article/52/managing-sites#adding-sites) with the following routes:
     - discourse_app on /
     - discourse_assets on /assets
-    - discourse_images on /images 
+    - discourse_images on /images
 11. [SSH to your app's shell user account](https://help.opalstack.com/article/14/ssh-access) and download the installation script `install_discourse.sh`:
 
     ```
@@ -39,7 +39,7 @@ kill `cat $HOME/apps/$APP_NAME/tmp/redis.pid`
 
 # start sidekiq
 cd  $HOME/apps/$APP_NAME/discourse
-RAILS_ENV=production RACK_ENV=production bundle exec sidekiq -d -L $HOME/logs/$APP_NAME/sidekiq.log -P $HOME/apps/$APP_NAME/discourse/tmp/pids/sidekiq.pid
+RAILS_ENV=production RACK_ENV=production bundle exec sidekiq -d -L $HOME/logs/apps/$APP_NAME/sidekiq.log -P $HOME/apps/$APP_NAME/discourse/tmp/pids/sidekiq.pid
 
 # stop sidekiq
 cd  $HOME/apps/$APP_NAME/discourse

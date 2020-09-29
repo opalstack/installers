@@ -190,7 +190,7 @@ def main():
                 master = True
                 http = 127.0.0.1:{appinfo["port"]}
                 virtualenv = {appdir}/env/
-                daemonize = /home/{appinfo["app_user"]}/logs/{appinfo["name"]}/uwsgi.log
+                daemonize = /home/{appinfo["app_user"]}/logs/apps/{appinfo["name"]}/uwsgi.log
                 pidfile = {appdir}/tmp/uwsgi.pid
                 workers = 2
                 threads = 2

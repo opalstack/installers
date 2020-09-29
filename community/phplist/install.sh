@@ -1,11 +1,10 @@
 #! /bin/bash
-# Opalstack Wordpress installer.
+# Opalstack PHPList installer.
 # Takes token and app info, creates a MySQL DB and DBUSER and provies the info as vars.
 # Order of operations best practice,
 # First external downloads. Tarballs, zips, archives, external libraries.
 # Second api calls to Opalstack control, DB creation, Port creation, etc.
 # Last logic to create the application. Shell commands to build and install.
-# THIS LINE
 
 CRED2='\033[1;91m'        # Red
 CGREEN2='\033[1;92m'      # Green
@@ -153,17 +152,15 @@ else
     echo 'DB User lookup OK.'
     printf $CEND
 
-    # Install wp-cli
-    echo 'WP CLI init'
-    /bin/mkdir -p $HOME/bin/
-    /bin/wget https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar -O $HOME/bin/wp
-    /bin/chmod +x $HOME/bin/wp
+    # Download src
+    /bin/wget https://phoenixnap.dl.sourceforge.net/project/phplist/phplist/3.5.4/phplist-3.5.4.tgz -O $HOME/src/phplist-3.5.4.tgz
 
     # use wp-cli to install wordpress,
     $HOME/bin/wp cli update
     $HOME/bin/wp core download --path=/home/$USER/apps/$APPNAME
     $HOME/bin/wp core config --dbhost=localhost --dbname=$DBNAME --dbuser=$DBUSER --dbpass=$DBPWD --path=/home/$USER/apps/$APPNAME
     /usr/bin/chmod 644 wp-config.php
+
     coreinstall=`$HOME/bin/wp core install --admin_name=$USER --admin_email=$accountemail --url="_" --title="Wordpress Blog" --path=/home/$USER/apps/$APPNAME`
     firstLine=`echo "${coreinstall}" | head -1`
     echo $firstLine
