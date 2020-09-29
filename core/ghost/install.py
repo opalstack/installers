@@ -157,7 +157,7 @@ def main():
     doit = run_command(cmd, cwd=f'{appdir}/ghost')
 
     # update ghost config to put logs in log dir
-    cmd = f'{appdir}/node_modules/.bin/ghost config set logging[\'path\'] \'/home/{appinfo["app_user"]}/logs/{appinfo["name"]}/\''
+    cmd = f'{appdir}/node_modules/.bin/ghost config set logging[\'path\'] \'/home/{appinfo["app_user"]}/logs/apps/{appinfo["name"]}/\''
     doit = run_command(cmd, cwd=f'{appdir}/ghost')
 
     # start script

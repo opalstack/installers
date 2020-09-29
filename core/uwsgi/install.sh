@@ -21,7 +21,7 @@ esac
 done
 
 now=$(date)
-echo "$now" >> /home/$USER/logs/$APPNAME/install.log
+echo "$now" >> /home/$USER/logs/apps/$APPNAME/install.log
 
 if [ -z $UUID ] || [ -z $OPAL_TOKEN ] || [ -z $APPNAME ]
 then
