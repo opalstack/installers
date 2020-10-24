@@ -149,6 +149,7 @@ def main():
     # create tmp dir
     os.mkdir(f'{appdir}/tmp', 0o700)
     logging.info(f'Created directory {appdir}/tmp')
+    CMD_ENV['TMPDIR'] = f'{appdir}/tmp'
 
     # create virtualenv
     cmd = f'/bin/python3.6 -m venv {appdir}/env'
