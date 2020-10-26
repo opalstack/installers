@@ -183,7 +183,7 @@ def main():
                 fi
 
                 cd $PROJECTDIR
-                LD_LIBRARY_PATH=/opt/lib GEM_HOME={appdir}/env $PROJECTDIR/bin/bundle exec puma -p {appinfo["port"]} -d
+                LD_LIBRARY_PATH=/opt/lib GEM_HOME={appdir}/env $PROJECTDIR/bin/bundle exec rails s -e development -p {appinfo["port"]} -d -P $PIDFILE
 
                 echo "Started Rails for {appinfo["name"]}."
                 ''')
@@ -259,7 +259,7 @@ def main():
                    your project dependencies with bundle:
 
                         export GEM_HOME={appdir}/env
-                        export PATH={appdir}/yourproject/bin:{appdir}/env/bin:$PATH
+                        export PATH={appdir}/env/bin:{appdir}/yourproject/bin:$PATH
                         cd {appdir}/yourproject
                         bundle install
 
@@ -270,7 +270,7 @@ def main():
                 5. Run the following commands to restart your Rails instance:
 
                         mkdir -p {appdir}/yourproject/tmp/pids
-                        cp {appdir}/oldproject/tmp/pids/* {appdir}/oldproject/tmp/pids/
+                        cp {appdir}/oldproject/tmp/pids/* {appdir}/yourproject/tmp/pids/
                         {appdir}/stop
                         {appdir}/start
 
