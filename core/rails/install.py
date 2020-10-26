@@ -173,7 +173,11 @@ def main():
                 # change the next line to your Rails project directory
                 PROJECTDIR='{appdir}/myproject'
 
+                # set your rails env, eg development or production
+                RAILS_ENV=development
+
                 # no need to edit below this line
+                APP_PORT={appinfo["port"]}
                 PATH=/opt/bin:$PROJECTDIR/bin:{appdir}/env/bin:$PATH
                 PIDFILE="$PROJECTDIR/tmp/pids/server.pid"
 
@@ -183,7 +187,7 @@ def main():
                 fi
 
                 cd $PROJECTDIR
-                LD_LIBRARY_PATH=/opt/lib GEM_HOME={appdir}/env $PROJECTDIR/bin/bundle exec rails s -e development -p {appinfo["port"]} -d -P $PIDFILE
+                LD_LIBRARY_PATH=/opt/lib GEM_HOME={appdir}/env $PROJECTDIR/bin/bundle exec rails s -e $RAILS_ENV -p $APP_PORT -d -P $PIDFILE
 
                 echo "Started Rails for {appinfo["name"]}."
                 ''')
