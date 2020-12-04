@@ -203,14 +203,9 @@ def main():
                 ## Production mode
 
                 Your Ghost app is initially configured to run in development
-                mode which uses less caching and is a bit slower.
-
-                To run in production mode, SSH to the server as your app's
-                shell user and run the following commands:
-
-                    cd {appdir}/ghost
-                    cp config.development.json config.production.json
-                    {appdir}/node_modules/.bin/ghost restart
+                mode which uses more memory and is slower than production mode.
+                To run in production mode please see:
+                https://help.opalstack.com/article/122/running-ghost-in-production-mode
 
 
                 ## Controlling your app
