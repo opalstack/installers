@@ -147,7 +147,7 @@ def main():
     appdir = f'/home/{appinfo["app_user"]}/apps/{appinfo["name"]}'
 
     # install ghostcli
-    cmd = f'npm install ghost-cli@latest'
+    cmd = f'cd {appdir}; npm install ghost-cli@latest'
     doit = run_command(cmd, cwd=appdir)
 
     # install ghost instance
