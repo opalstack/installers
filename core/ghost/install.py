@@ -148,7 +148,9 @@ def main():
 
     # install ghostcli
     # TODO: remove sleep after race is figured out
-    cmd = f'sleep 10; npm install ghost-cli@latest'
+    cmd = f'sleep 10'
+    doit = run_command(cmd, cwd=appdir)
+    cmd = f'npm install ghost-cli@latest'
     doit = run_command(cmd, cwd=appdir)
 
     # install ghost instance
