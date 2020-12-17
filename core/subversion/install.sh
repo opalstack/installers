@@ -48,7 +48,7 @@ else
     /usr/bin/touch /home/$USER/apps/$APPNAME/passwd
     PASSWORD=$(date +%s | sha256sum | base64 | head -c 16 ; echo)
     /usr/bin/htpasswd -b -c /home/$USER/apps/$APPNAME/passwd $USER $PASSWORD
-    #/usr/bin/echo -e "\n" >> /home/$USER/apps/$APPNAME/passwd
+    /usr/bin/echo -e "[/]\n~\* = rw" > /home/$USER/apps/$APPNAME/passwd
     /usr/bin/touch /home/$USER/apps/$APPNAME/authz
     /usr/bin/curl -s -X POST --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN" -d'{"id": "'"$UUID"'", "init_created":true,  "note":"'"Admin user: $USER / $PASSWORD"'"}' $API_URL/api/v0/app/init_created/
 fi;
