@@ -45,5 +45,7 @@ else
     fi;
     /bin/svnadmin create /home/$USER/apps/$APPNAME/trunk
     /usr/bin/setfacl -R -m u:apache:rwx /home/$USER/apps/$APPNAME/trunk
+    /usr/bin/touch /home/$USER/apps/$APPNAME/passwd
+    /usr/bin/touch /home/$USER/apps/$APPNAME/authz
     /usr/bin/curl -s -X POST --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN" -d'{"id": "'"$UUID"'", "init_created":true}' $API_URL/api/v0/app/init_created/
 fi;
