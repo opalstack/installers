@@ -43,7 +43,7 @@ else
          echo 'UUID validation and server lookup failed.'
          exit 1
     fi;
-    /bin/svnadmin create /home/$USER/apps/$APPNAME/trunk
+    /bin/svnadmin create /home/$USER/apps/$APPNAME/repo
     /usr/bin/setfacl -R -m u:apache:rwx /home/$USER/apps/$APPNAME/repo
     /usr/bin/touch /home/$USER/apps/$APPNAME/passwd
     PASSWORD=$(date +%s | sha256sum | base64 | head -c 16 ; echo)
