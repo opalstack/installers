@@ -50,7 +50,7 @@ print(f'Wrote {stop_path}')
 uwsgi_ini_path = f'/home/{user}/apps/{name}/uwsgi.ini'
 uwsgi_ini = f'''[uwsgi]
 master = True
-http = 127.0.0.1:{port}
+http-socket = 127.0.0.1:{port}
 virtualenv = /home/{user}/apps/{name}/env/
 daemonize = /home/{user}/logs/apps/{name}/uwsgi.log
 pidfile = /home/{user}/apps/{name}/tmp/{name}.pid

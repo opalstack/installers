@@ -189,7 +189,7 @@ def main():
     uwsgi_conf = textwrap.dedent(f'''\
                 [uwsgi]
                 master = True
-                http = 127.0.0.1:{appinfo["port"]}
+                http-socket = 127.0.0.1:{appinfo["port"]}
                 virtualenv = {appdir}/env/
                 daemonize = /home/{appinfo["app_user"]}/logs/apps/{appinfo["name"]}/uwsgi.log
                 pidfile = {appdir}/tmp/uwsgi.pid
