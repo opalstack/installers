@@ -14,7 +14,7 @@ import shlex
 from urllib.parse import urlparse
 
 API_HOST = os.environ.get('API_URL').strip('https://').strip('http://')
-API_BASE_URI = '/api/v0'
+API_BASE_URI = '/api/v1'
 GITEA_URL = 'https://dl.gitea.io/gitea/1.8/gitea-1.8-linux-amd64'
 CMD_ENV = {'PATH': '/usr/local/bin:/usr/bin:/bin','UMASK': '0002',}
 
@@ -305,7 +305,7 @@ def main():
     msg = f'Initial user is {appinfo["app_user"]}, password: {pw} - see README in app directory for final steps.'
     payload = json.dumps({'id': args.app_uuid, 'init_created': True,
                           'note': msg})
-    finished=api.post('/app/init_created/', payload)
+    finished=api.post('/app/installed/', payload)
 
     logging.info(f'Completed installation of Gitea app {args.app_name}')
 
