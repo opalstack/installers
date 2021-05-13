@@ -17,6 +17,7 @@ from urllib.parse import urlparse
 API_HOST = os.environ.get('API_URL').strip('https://').strip('http://')
 API_BASE_URI = '/api/v0'
 CMD_ENV = {'PATH': '/usr/local/bin:/usr/bin:/bin','UMASK': '0002',}
+LTS_NODE_URL = 'https://nodejs.org/download/release/v14.17.0/node-v14.17.0-linux-x64.tar.xz'
 
 
 class OpalstackAPITool():
@@ -147,6 +148,14 @@ def main():
     appinfo = api.get(f'/app/read/{args.app_uuid}')
     appdir = f'/home/{appinfo["app_user"]}/apps/{appinfo["name"]}'
 
+    # get current LTS nodejs
+    cmd = f'mkdir {appdir}/node'
+    doit = run_command(cmd)
+    download(LTS_NODE_URL, f'{appdir}/node.tar.xz')
+    cmd = f'tar xf {appdir}/node.tar.xz --strip 1'
+    doit = run_command(cmd, cwd=f'{appdir}/node')
+    CMD_ENV['PATH'] = f'{appdir}/node/bin:{CMD_ENV["PATH"]}'
+
     # make app.js
     NEWLINE = '\\n'
     appjs = textwrap.dedent(f'''\
@@ -172,7 +181,7 @@ def main():
                 export TMPDIR={appdir}/tmp
                 mkdir -p {appdir}/tmp
                 PIDFILE="{appdir}/tmp/node.pid"
-                NODE=/bin/node
+                NODE={appdir}/node/bin/node
 
                 if [ -e "$PIDFILE" ] && (pgrep -u {appinfo["app_user"]} | grep -x -f $PIDFILE &> /dev/null); then
                   echo "Node.js for {appinfo["name"]} already running."
@@ -214,7 +223,8 @@ def main():
     create_file(f'{appdir}/stop', stop_script, perms=0o700)
 
     # cron
-    croncmd = f'*/10 * * * * {appdir}/start > /dev/null 2>&1'
+    m = random.randint(0,9)
+    croncmd = f'0{d},1{d},2{d},3{d},5{d},5{d} * * * * {appdir}/start > /dev/null 2>&1'
     cronjob = add_cronjob(croncmd)
 
     # make README

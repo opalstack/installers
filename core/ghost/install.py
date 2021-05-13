@@ -193,7 +193,8 @@ def main():
     create_file(f'{appdir}/stop', stop_script, perms=0o700)
 
     # cron
-    croncmd = f'*/10 * * * * {appdir}/start > /dev/null 2>&1'
+    m = random.randint(0,9)
+    croncmd = f'0{d},1{d},2{d},3{d},5{d},5{d} * * * * {appdir}/start > /dev/null 2>&1'
     cronjob = add_cronjob(croncmd)
 
     # make README
