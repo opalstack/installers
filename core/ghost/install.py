@@ -16,6 +16,7 @@ from urllib.parse import urlparse
 API_HOST = os.environ.get('API_URL').strip('https://').strip('http://')
 API_BASE_URI = '/api/v0'
 CMD_ENV = {'PATH': '/usr/local/bin:/usr/bin:/bin','UMASK': '0002',}
+LTS_NODE_URL = 'https://nodejs.org/download/release/v14.17.0/node-v14.17.0-linux-x64.tar.xz'
 
 
 class OpalstackAPITool():
@@ -146,11 +147,21 @@ def main():
     appinfo = api.get(f'/app/read/{args.app_uuid}')
     appdir = f'/home/{appinfo["app_user"]}/apps/{appinfo["name"]}'
 
+    # get current LTS nodejs
+    cmd = f'mkdir {appdir}/node'
+    doit = run_command(cmd)
+    download(LTS_NODE_URL, f'{appdir}/node.tar.xz')
+    cmd = f'tar xf {appdir}/node.tar.xz --strip 1'
+    doit = run_command(cmd, cwd=f'{appdir}/node')
+    CMD_ENV['PATH'] = f'{appdir}/node/bin:{CMD_ENV["PATH"]}'
+
     # install ghostcli
     # TODO: remove sleep after race is figured out
     cmd = f'sleep 10'
     doit = run_command(cmd, cwd=appdir)
     cmd = f'npm install ghost-cli@latest'
+    doit = run_command(cmd, cwd=appdir)
+    cmd = f'''sed -i -e 's/mode.others.read/mode.owner.read/' {appdir}/node_modules/ghost-cli/lib/commands/doctor/checks/check-directory.js'''
     doit = run_command(cmd, cwd=appdir)
 
     # install ghost instance
@@ -166,6 +177,7 @@ def main():
     # start script
     start_script = textwrap.dedent(f'''\
                 #!/bin/bash
+                PATH={appdir}/node/bin:$PATH
                 {appdir}/node_modules/.bin/ghost start -d {appdir}/ghost
                 echo "Started Ghost for {appinfo["name"]}."
                 ''')
@@ -174,6 +186,7 @@ def main():
     # stop script
     stop_script = textwrap.dedent(f'''\
                 #!/bin/bash
+                PATH={appdir}/node/bin:$PATH
                 {appdir}/node_modules/.bin/ghost stop -d {appdir}/ghost
                 echo "Stopped Ghost for {appinfo["name"]}."
                 ''')
