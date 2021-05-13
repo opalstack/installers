@@ -224,7 +224,7 @@ def main():
 
     # cron
     m = random.randint(0,9)
-    croncmd = f'0{d},1{d},2{d},3{d},5{d},5{d} * * * * {appdir}/start > /dev/null 2>&1'
+    croncmd = f'0{m},1{m},2{m},3{m},4{m},5{m} * * * * {appdir}/start > /dev/null 2>&1'
     cronjob = add_cronjob(croncmd)
 
     # make README
