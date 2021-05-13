@@ -98,11 +98,11 @@ def gen_password(length=20):
     return ''.join(secrets.choice(chars) for i in range(length))
 
 
-def run_command(cmd, env=CMD_ENV):
+def run_command(cmd, cwd=None, env=CMD_ENV):
     """runs a command, returns output"""
     logging.info(f'Running: {cmd}')
     try:
-        result = subprocess.check_output(shlex.split(cmd), env=env)
+        result = subprocess.check_output(shlex.split(cmd), cwd=cwd, env=env)
     except subprocess.CalledProcessError as e:
         logging.debug(e.output)
     return result
