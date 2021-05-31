@@ -64,9 +64,28 @@ else
 
 
     # create database
-    dbsend='{"name": "'"$APPNAME"'", "server": "'"$serverid"'" }'
-    if dbjson=`curl -s --fail --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN" -d"$dbsend"  $API_URL/api/v1/mariadb/autoadd/` ;then
-         export $(echo $dbjson| jq -r '@sh "DBNAME=\(.name) CHARSET=\(.charset) DBID=\(.id) DBUSERID=\(.dbuserid) DBUSER=\(.dbuser) DBPWD=\(.default_password) SERVER=\(.server)"' )
+    dbusend='{"name": "'"$APPNAME"'", "server": "'"$serverid"'" }'
+    # create database user
+    if dbjson=`curl -s --fail --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN" -d"$dbusend"  $API_URL/api/v1/mariauser/add/` ;then
+         export $(echo $dbjson| jq -r '@sh "DBUSERID=\(.id) DBUSER=\(.name) DBPWD=\(.default_password)"' )
+         printf $CGREEN2
+         echo 'DB user creation OK.'
+         printf $CEND
+    else
+         printf $CRED2
+         echo 'DB user creation failed.'
+         exit 1
+    fi;
+    eval DBUSER=$DBUSER
+    eval DBUSERID=$DBUSERID
+    eval DBPWD=$DBPWD
+    echo "Database User Created"
+    echo $DBNAME
+    echo $DBUSER
+
+    dbsend='{"name": "'"$APPNAME"'", "server": "'"$serverid"'", "dbusers_readwrite": "'["$DBUSERID"]'" }'
+    if dbjson=`curl -s --fail --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN" -d"$dbsend"  $API_URL/api/v1/mariadb/add/` ;then
+         export $(echo $dbjson| jq -r '@sh "DBNAME=\(.name) DBID=\(.id) SERVER=\(.server)"' )
          printf $CGREEN2
          echo 'DB creation OK.'
          printf $CEND
@@ -76,13 +95,10 @@ else
          exit 1
     fi;
     eval DBNAME=$DBNAME
-    eval DBUSERID=$DBUSERID
     eval DBID=$DBID
-    eval DBUSER=$DBUSER
-    eval DBPWD=$DBPWD
+
     echo "Database Created"
     echo $DBNAME
-    echo $DBUSER
 
     echo "waiting for 10 seconds so the DB and DBUser can be created"
     sleep 10
