@@ -300,8 +300,7 @@ def main():
 
     # finished, push a notice with credentials
     msg = f'See README in app directory for final steps.'
-    payload = json.dumps({'id': args.app_uuid, 'init_created': True,
-                          'note': msg})
+    payload = json.dumps([{'id': args.app_uuid }])
     finished=api.post('/app/installed/', payload)
 
     logging.info(f'Completed installation of Django app {args.app_name}')
