@@ -64,9 +64,9 @@ else
 
 
     # create database
-    dbusend='{"name": "'"$APPNAME"'", "server": "'"$serverid"'" }'
+    dbusend='[{"name": "'"$APPNAME"'", "server": "'"$serverid"'" }]'
     # create database user
-    if dbjson=`curl -s --fail --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN" -d"$dbusend"  $API_URL/api/v1/mariauser/add/` ;then
+    if dbjson=`curl -s --fail --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN" -d"$dbusend"  $API_URL/api/v1/mariauser/create/` ;then
          export $(echo $dbjson| jq -r '@sh "DBUSERID=\(.id) DBUSER=\(.name) DBPWD=\(.default_password)"' )
          printf $CGREEN2
          echo 'DB user creation OK.'
@@ -83,8 +83,8 @@ else
     echo $DBNAME
     echo $DBUSER
 
-    dbsend='{"name": "'"$APPNAME"'", "server": "'"$serverid"'", "dbusers_readwrite": "'["$DBUSERID"]'" }'
-    if dbjson=`curl -s --fail --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN" -d"$dbsend"  $API_URL/api/v1/mariadb/add/` ;then
+    dbsend='[{"name": "'"$APPNAME"'", "server": "'"$serverid"'", "dbusers_readwrite": "'["$DBUSERID"]'" }]'
+    if dbjson=`curl -s --fail --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN" -d"$dbsend"  $API_URL/api/v1/mariadb/create/` ;then
          export $(echo $dbjson| jq -r '@sh "DBNAME=\(.name) DBID=\(.id) SERVER=\(.server)"' )
          printf $CGREEN2
          echo 'DB creation OK.'
