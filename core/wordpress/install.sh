@@ -81,10 +81,12 @@ else
     eval DBPWD=$DBPWD
     echo "Database User Created"
     echo $DBUSER
+    echo $DBUSERID
 
     dbsend='[{"name": "'"$APPNAME"'", "server": "'"$serverid"'", "dbusers_readwrite": "['"$DBUSERID"']" }]'
+    echo $dbsend
     if dbjson=`curl -s --fail --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN" -d"$dbsend"  $API_URL/api/v1/mariadb/create/` ;then
-         export $(echo $dbjson| jq -r '@sh "DBNAME=\(.[0].name) DBID=\(.[0].id) SERVER=\(.[0].server)"' )
+         export $(echo $dbjson| jq -r '@sh "DBNAME=\(.[0].name) DBID=\(.[0].id) "' )
          printf $CGREEN2
          echo 'DB creation OK.'
          printf $CEND
