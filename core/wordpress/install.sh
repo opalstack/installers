@@ -185,6 +185,6 @@ else
     firstLine=`echo "${coreinstall}" | head -1`
     echo $firstLine
     # Send JSON installed OK.
-    #/usr/bin/curl -s -X POST --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN" -d'{"id": "'"$UUID"'", "init_created":true, "note":"'"Admin user: $USER / $firstLine"'"}' $API_URL/api/v1/app/init_created/
+    /usr/bin/curl -s -X POST --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN" -d'{"id": \"'$UUID'\"}' $API_URL/api/v1/app/installed/
 
 fi;
