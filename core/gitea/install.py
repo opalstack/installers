@@ -152,9 +152,9 @@ def main():
     payload = json.dumps({"id":args.app_uuid,"json":{"proxy_pass_trailing_slash":True}})
     slashit = api.post('/app/update/', payload)
 
-    CMD_ENV['HOME'] = f'/home/{appinfo["app_user"]}'
-    CMD_ENV['USER'] = appinfo['app_user']
-    appdir = f'/home/{appinfo["app_user"]}/apps/{appinfo["name"]}'
+    CMD_ENV['HOME'] = f'/home/{appinfo["osuser_name"]}'
+    CMD_ENV['USER'] = appinfo['osuser_name']
+    appdir = f'/home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}'
     os.mkdir(f'{appdir}/bin', 0o700)
     os.mkdir(f'{appdir}/custom', 0o700)
     os.mkdir(f'{appdir}/custom/conf', 0o700)
@@ -203,11 +203,11 @@ def main():
 
     # create initial user
     pw = gen_password()
-    cmd = f'{appdir}/gitea admin create-user --name {appinfo["app_user"]} \
-            --password {pw} --email {appinfo["app_user"]}@localhost --admin'
+    cmd = f'{appdir}/gitea admin create-user --name {appinfo["osuser_name"]} \
+            --password {pw} --email {appinfo["osuser_name"]}@localhost --admin'
     createuser = run_command(cmd)
-    logging.info(f'created initial gitea user {appinfo["app_user"]}')
-    logging.debug(f'created initial gitea user {appinfo["app_user"]} with password {pw}')
+    logging.info(f'created initial gitea user {appinfo["osuser_name"]}')
+    logging.debug(f'created initial gitea user {appinfo["osuser_name"]} with password {pw}')
     logging.debug(createuser)
 
     # start script
@@ -218,7 +218,7 @@ def main():
                 mkdir -p {appdir}/var
                 PIDFILE="{appdir}/var/gitea.pid"
 
-                if [ -e "$PIDFILE" ] && (pgrep -u {appinfo["app_user"]} | grep -x -f $PIDFILE &> /dev/null); then
+                if [ -e "$PIDFILE" ] && (pgrep -u {appinfo["osuser_name"]} | grep -x -f $PIDFILE &> /dev/null); then
                   echo "Gitea instance already running."
                   exit 99
                 fi
@@ -244,12 +244,12 @@ def main():
 
                 PID=$(cat $PIDFILE)
 
-                if [ -e "$PIDFILE" ] && (pgrep -u {appinfo["app_user"]} | grep -x -f $PIDFILE &> /dev/null); then
+                if [ -e "$PIDFILE" ] && (pgrep -u {appinfo["osuser_name"]} | grep -x -f $PIDFILE &> /dev/null); then
                   kill $PID
                   sleep 3
                 fi
 
-                if [ -e "$PIDFILE" ] && (pgrep -u {appinfo["app_user"]} | grep -x -f $PIDFILE &> /dev/null); then
+                if [ -e "$PIDFILE" ] && (pgrep -u {appinfo["osuser_name"]} | grep -x -f $PIDFILE &> /dev/null); then
                   echo "Gitea did not stop, killing it."
                   sleep 3
                   kill -9 $PID
@@ -302,9 +302,8 @@ def main():
     startit = run_command(cmd)
 
     # finished, push a notice with credentials
-    msg = f'Initial user is {appinfo["app_user"]}, password: {pw} - see README in app directory for final steps.'
-    payload = json.dumps({'id': args.app_uuid, 'init_created': True,
-                          'note': msg})
+    msg = f'Initial user is {appinfo["osuser_name"]}, password: {pw} - see README in app directory for final steps.'
+    payload = json.dumps([{'id': args.app_uuid}])
     finished=api.post('/app/installed/', payload)
 
     logging.info(f'Completed installation of Gitea app {args.app_name}')
