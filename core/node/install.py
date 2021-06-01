@@ -15,7 +15,7 @@ import random
 from urllib.parse import urlparse
 
 API_HOST = os.environ.get('API_URL').strip('https://').strip('http://')
-API_BASE_URI = '/api/v0'
+API_BASE_URI = '/api/v1'
 CMD_ENV = {'PATH': '/usr/local/bin:/usr/bin:/bin','UMASK': '0002',}
 LTS_NODE_URL = 'https://nodejs.org/download/release/v14.17.0/node-v14.17.0-linux-x64.tar.xz'
 
