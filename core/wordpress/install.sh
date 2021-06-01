@@ -67,7 +67,7 @@ else
     dbusend='[{"name": "'"$APPNAME"'", "server": "'"$serverid"'" }]'
     # create database user
     if dbjson=`curl -s --fail --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN" -d"$dbusend"  $API_URL/api/v1/mariauser/create/` ;then
-         export $(echo $dbjson| jq -r '@sh "DBUSERID=\(.id) DBUSER=\(.name) DBPWD=\(.default_password)"' )
+         export $(echo $dbjson| jq -r '@sh "DBUSERID=\(.[0].id) DBUSER=\(.[0].name) DBPWD=\(.[0].default_password)"' )
          printf $CGREEN2
          echo 'DB user creation OK.'
          printf $CEND
@@ -85,7 +85,7 @@ else
 
     dbsend='[{"name": "'"$APPNAME"'", "server": "'"$serverid"'", "dbusers_readwrite": "'["$DBUSERID"]'" }]'
     if dbjson=`curl -s --fail --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN" -d"$dbsend"  $API_URL/api/v1/mariadb/create/` ;then
-         export $(echo $dbjson| jq -r '@sh "DBNAME=\(.name) DBID=\(.id) SERVER=\(.server)"' )
+         export $(echo $dbjson| jq -r '@sh "DBNAME=\(.[0].name) DBID=\(.[0].id) SERVER=\(.[0].server)"' )
          printf $CGREEN2
          echo 'DB creation OK.'
          printf $CEND
