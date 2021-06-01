@@ -144,7 +144,7 @@ def main():
     logging.info(f'Started installation of Ghost app {args.app_name}')
     api = OpalstackAPITool(API_HOST, API_BASE_URI, args.opal_token, args.opal_user, args.opal_password)
     appinfo = api.get(f'/app/read/{args.app_uuid}')
-    appdir = f'/home/{appinfo["app_user"]}/apps/{appinfo["name"]}'
+    appdir = f'/home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}'
 
     # install ghostcli
     # TODO: remove sleep after race is figured out
@@ -160,7 +160,7 @@ def main():
     doit = run_command(cmd, cwd=f'{appdir}/ghost')
 
     # update ghost config to put logs in log dir
-    cmd = f'{appdir}/node_modules/.bin/ghost config set logging[\'path\'] \'/home/{appinfo["app_user"]}/logs/apps/{appinfo["name"]}/\''
+    cmd = f'{appdir}/node_modules/.bin/ghost config set logging[\'path\'] \'/home/{appinfo["osuser_name"]}/logs/apps/{appinfo["name"]}/\''
     doit = run_command(cmd, cwd=f'{appdir}/ghost')
 
     # start script
@@ -247,8 +247,7 @@ def main():
 
     # finished, push a notice
     msg = f'Post-install configuration is required, see README in app directory for more info.'
-    payload = json.dumps({'id': args.app_uuid, 'init_created': True,
-                          'note': msg})
+    payload = json.dumps([{'id': args.app_uuid }])
     finished=api.post('/app/installed/', payload)
 
     logging.info(f'Completed installation of Ghost app {args.app_name}')
