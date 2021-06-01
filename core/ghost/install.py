@@ -53,7 +53,9 @@ class OpalstackAPITool():
         endpoint = self.base_uri + endpoint
         conn = http.client.HTTPSConnection(self.host)
         conn.request('GET', endpoint, headers=self.headers)
-        return json.loads(conn.getresponse().read())
+        connread = conn.getresponse().read()
+        logging.info(connread)
+        return json.loads(connread)
 
     def post(self, endpoint, payload):
         """POSTs data to an API endpoint"""
