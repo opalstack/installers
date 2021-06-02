@@ -260,7 +260,7 @@ def main():
     # finished, push a notice
     msg = f'See README in app directory for more info.'
     payload = json.dumps([{'id': args.app_uuid}])
-    finished=api.post('/app/init_created/', payload)
+    finished=api.post('/app/installed/', payload)
 
     logging.info(f'Completed installation of Node.js app {args.app_name}')
 
