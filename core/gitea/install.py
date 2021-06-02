@@ -73,7 +73,7 @@ def create_file(path, contents, writemode='w', perms=0o600):
 def download(url, appdir, localfile, writemode='wb', perms=0o600):
     """save a remote file, perms are passed as octal"""
     logging.info(f'Downloading {url} as {localfile} in {appdir} with permissions {oct(perms)}')
-    subprocess.run(['/usr/bin/wget', url, '-P', appdir, '-o /dev/null -O', localfile} ])
+    subprocess.run(['/usr/bin/wget', url, '-P', appdir, '-o /dev/null -O', localfile ])
     logging.info(f'Downloaded {url} as {localfile} with permissions {oct(perms)}')
 
 def gen_password(length=20):
