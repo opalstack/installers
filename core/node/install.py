@@ -60,7 +60,9 @@ class OpalstackAPITool():
         endpoint = self.base_uri + endpoint
         conn = http.client.HTTPSConnection(self.host)
         conn.request('POST', endpoint, payload, headers=self.headers)
-        return json.loads(conn.getresponse().read())
+        connread = conn.getresponse().read()
+        print(connread)
+        return json.loads(connread)
 
 
 def create_file(path, contents, writemode='w', perms=0o600):
