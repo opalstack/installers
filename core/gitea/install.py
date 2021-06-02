@@ -12,6 +12,7 @@ import string
 import subprocess
 import shlex
 from urllib.parse import urlparse
+from subprocess import Popen
 
 API_HOST = os.environ.get('API_URL').strip('https://').strip('http://')
 API_BASE_URI = '/api/v1'
