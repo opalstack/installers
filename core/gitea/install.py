@@ -75,7 +75,7 @@ def download(url, appdir, localfile, writemode='wb', perms=0o600):
     """save a remote file, perms are passed as octal"""
     logging.info(f'Downloading {url} as {localfile} in {appdir} with permissions {oct(perms)}')
     grab_cmd =  f'/usr/bin/wget {url} -P {appdir} -o /dev/null -O {localfile}'
-    grap_proc = Popen([ "/bin/su", CMD_ENV['USER'], "-c", grab_cmd ])
+    grap_proc = Popen([ grab_cmd ])
     grap_proc.wait()
     logging.info(f'Downloaded {url} as {localfile} with permissions {oct(perms)}')
 
