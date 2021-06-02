@@ -16,7 +16,7 @@ from subprocess import Popen
 
 API_HOST = os.environ.get('API_URL').strip('https://').strip('http://')
 API_BASE_URI = '/api/v1'
-GITEA_URL = 'https://github.com/go-gitea/gitea/releases/download/v1.14.2/gitea-1.14.2-linux-amd64'
+GITEA_URL = 'https://dl.gitea.io/gitea/1.14.2/gitea-1.14.2-linux-amd64'
 CMD_ENV = {'PATH': '/usr/local/bin:/usr/bin:/bin','UMASK': '0002',}
 
 
