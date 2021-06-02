@@ -70,24 +70,12 @@ def create_file(path, contents, writemode='w', perms=0o600):
     logging.info(f'Created file {path} with permissions {oct(perms)}')
 
 
-def download(url, localfile, writemode='wb', perms=0o600):
+def download(url, appdir, localfile, writemode='wb', perms=0o600):
     """save a remote file, perms are passed as octal"""
-    logging.info(f'Downloading {url} as {localfile} with permissions {oct(perms)}')
-    u = urlparse(url)
-    if u.scheme == 'http':
-        conn = http.client.HTTPConnection(u.netloc)
-    else:
-        conn = http.client.HTTPSConnection(u.netloc)
-    conn.request('GET', u.path)
-    r = conn.getresponse()
-    with open(localfile, writemode) as f:
-        while True:
-            data = r.read(4096)
-            if data:
-                f.write(data)
-            else:
-                break
-    os.chmod(localfile, perms)
+    logging.info(f'Downloading {url} as {localfile} in {appdir} with permissions {oct(perms)}')
+    grab_cmd =  f'/usr/bin/wget {url} -P {appdir} -o /dev/null -O {localfile}'
+    grap_proc = Popen([ "/bin/su", CMD_ENV['USER'], "-c", grab_cmd ])
+    grap_proc.wait()
     logging.info(f'Downloaded {url} as {localfile} with permissions {oct(perms)}')
 
 
@@ -166,7 +154,7 @@ def main():
     logging.info('Created initial gitea subdirectories')
 
     # download gitea
-    download(GITEA_URL, f'{appdir}/gitea', perms=0o700)
+    download(GITEA_URL, appdir, f'{appdir}/gitea', perms=0o700)
 
     # config
     gitea_conf = textwrap.dedent(f'''\
