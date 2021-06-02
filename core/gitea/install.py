@@ -12,7 +12,6 @@ import string
 import subprocess
 import shlex
 from urllib.parse import urlparse
-from subprocess import Popen
 
 API_HOST = os.environ.get('API_URL').strip('https://').strip('http://')
 API_BASE_URI = '/api/v1'
@@ -74,11 +73,8 @@ def create_file(path, contents, writemode='w', perms=0o600):
 def download(url, appdir, localfile, writemode='wb', perms=0o600):
     """save a remote file, perms are passed as octal"""
     logging.info(f'Downloading {url} as {localfile} in {appdir} with permissions {oct(perms)}')
-    grab_cmd =  f'/usr/bin/wget {url} -P {appdir} -o /dev/null -O {localfile}'
-    grap_proc = Popen([ grab_cmd ])
-    grap_proc.wait()
+    subprocess.run(['/usr/bin/wget', url, '-P', appdir, '-o /dev/null -O', localfile} ])
     logging.info(f'Downloaded {url} as {localfile} with permissions {oct(perms)}')
-
 
 def gen_password(length=20):
     """makes a random password"""
