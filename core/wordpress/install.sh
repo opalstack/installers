@@ -181,11 +181,11 @@ else
     $HOME/bin/wp core download --path=/home/$USER/apps/$APPNAME
     $HOME/bin/wp core config --dbhost=localhost --dbname=$DBNAME --dbuser=$DBUSER --dbpass=$DBPWD --path=/home/$USER/apps/$APPNAME
     /usr/bin/chmod 644 wp-config.php
-    coreinstall=`$HOME/bin/wp core install --admin_name=$USER --admin_email=$accountemail --admin_password=$DBPWD --url="_" --title="Wordpress Blog" --path=/home/$USER/apps/$APPNAME`
+    coreinstall=`$HOME/bin/wp core install --admin_name=$USER --admin_email=$accountemail --url="_" --title="Wordpress Blog" --path=/home/$USER/apps/$APPNAME`
     firstLine=`echo "${coreinstall}" | head -1`
     echo $firstLine
     # Send JSON installed OK.
     /usr/bin/curl -s -X POST --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN" -d'[{"id": "'$UUID'"}]' $API_URL/api/v1/app/installed/
     # Create notice
-    /usr/bin/curl -X POST --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN" -d"[{\"type\": \"D\", \"body\": \"Created wordpress app $APPNAME with admin username $USER and password $DBPWD\"}]" $API_URL/api/v1/notice/create/
+    /usr/bin/curl -s -X POST --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN" -d'[{"type": "D", "body":"'"Created wordpress app $APPNAME with Admin user: $USER / $firstLine"'"}]' $API_URL/api/v1/notice/create/
 fi;
