@@ -204,7 +204,7 @@ def main():
 
     # create initial user
     pw = gen_password()
-    cmd = f'{appdir}/gitea admin create-user --name {appinfo["app_user"]} \
+    cmd = f'{appdir}/gitea admin user create --name {appinfo["app_user"]} \
             --password {pw} --email {appinfo["app_user"]}@localhost --admin'
     createuser = run_command(cmd)
     logging.info(f'created initial gitea user {appinfo["app_user"]}')
