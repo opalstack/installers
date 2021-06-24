@@ -11,6 +11,7 @@ import secrets
 import string
 import subprocess
 import shlex
+import random
 from urllib.parse import urlparse
 
 API_HOST = os.environ.get('API_URL').strip('https://').strip('http://')
@@ -249,7 +250,8 @@ def main():
     create_file(f'{appdir}/stop', stop_script, perms=0o700)
 
     # cron
-    croncmd = f'*/10 * * * * {appdir}/start > /dev/null 2>&1'
+    m = random.randint(0,9)
+    croncmd = f'0{m},1{m},2{m},3{m},4{m},5{m} * * * * {appdir}/start > /dev/null 2>&1'
     cronjob = add_cronjob(croncmd)
 
     # make README
