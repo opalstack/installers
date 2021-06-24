@@ -15,7 +15,7 @@ import random
 from urllib.parse import urlparse
 
 API_HOST = os.environ.get('API_URL').strip('https://').strip('http://')
-API_BASE_URI = '/api/v0'
+API_BASE_URI = '/api/v1'
 CMD_ENV = {'PATH': '/usr/local/bin:/usr/bin:/bin','UMASK': '0002',}
 
 
@@ -145,7 +145,7 @@ def main():
     logging.info(f'Started installation of Django app {args.app_name}')
     api = OpalstackAPITool(API_HOST, API_BASE_URI, args.opal_token, args.opal_user, args.opal_password)
     appinfo = api.get(f'/app/read/{args.app_uuid}')
-    appdir = f'/home/{appinfo["app_user"]}/apps/{appinfo["name"]}'
+    appdir = f'/home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}'
 
     # create tmp dir
     os.mkdir(f'{appdir}/tmp', 0o700)
@@ -192,7 +192,7 @@ def main():
                 master = True
                 http-socket = 127.0.0.1:{appinfo["port"]}
                 virtualenv = {appdir}/env/
-                daemonize = /home/{appinfo["app_user"]}/logs/apps/{appinfo["name"]}/uwsgi.log
+                daemonize = /home/{appinfo["osuser_name"]}/logs/apps/{appinfo["name"]}/uwsgi.log
                 pidfile = {appdir}/tmp/uwsgi.pid
                 workers = 2
                 threads = 2
@@ -211,7 +211,7 @@ def main():
                 mkdir -p {appdir}/tmp
                 PIDFILE="{appdir}/tmp/uwsgi.pid"
 
-                if [ -e "$PIDFILE" ] && (pgrep -u {appinfo["app_user"]} | grep -x -f $PIDFILE &> /dev/null); then
+                if [ -e "$PIDFILE" ] && (pgrep -u {appinfo["osuser_name"]} | grep -x -f $PIDFILE &> /dev/null); then
                   echo "uWSGI for {appinfo["name"]} already running."
                   exit 99
                 fi
@@ -234,12 +234,12 @@ def main():
 
                 PID=$(cat $PIDFILE)
 
-                if [ -e "$PIDFILE" ] && (pgrep -u {appinfo["app_user"]} | grep -x -f $PIDFILE &> /dev/null); then
+                if [ -e "$PIDFILE" ] && (pgrep -u {appinfo["osuser_name"]} | grep -x -f $PIDFILE &> /dev/null); then
                   {appdir}/env/bin/uwsgi --stop $PIDFILE
                   sleep 3
                 fi
 
-                if [ -e "$PIDFILE" ] && (pgrep -u {appinfo["app_user"]} | grep -x -f $PIDFILE &> /dev/null); then
+                if [ -e "$PIDFILE" ] && (pgrep -u {appinfo["osuser_name"]} | grep -x -f $PIDFILE &> /dev/null); then
                   echo "uWSGI did not stop, killing it."
                   sleep 3
                   kill -9 $PID
@@ -302,9 +302,8 @@ def main():
 
     # finished, push a notice with credentials
     msg = f'See README in app directory for final steps.'
-    payload = json.dumps({'id': args.app_uuid, 'init_created': True,
-                          'note': msg})
-    finished=api.post('/app/init_created/', payload)
+    payload = json.dumps([{'id': args.app_uuid }])
+    finished=api.post('/app/installed/', payload)
 
     logging.info(f'Completed installation of Django app {args.app_name}')
 

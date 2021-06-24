@@ -15,7 +15,7 @@ import random
 from urllib.parse import urlparse
 
 API_HOST = os.environ.get('API_URL').strip('https://').strip('http://')
-API_BASE_URI = '/api/v0'
+API_BASE_URI = '/api/v1'
 CMD_ENV = {'PATH': '/usr/local/bin:/usr/bin:/bin','UMASK': '0002',}
 LTS_NODE_URL = 'https://nodejs.org/download/release/v14.17.0/node-v14.17.0-linux-x64.tar.xz'
 
@@ -60,7 +60,9 @@ class OpalstackAPITool():
         endpoint = self.base_uri + endpoint
         conn = http.client.HTTPSConnection(self.host)
         conn.request('POST', endpoint, payload, headers=self.headers)
-        return json.loads(conn.getresponse().read())
+        connread = conn.getresponse().read()
+        print(connread)
+        return json.loads(connread)
 
 
 def create_file(path, contents, writemode='w', perms=0o600):
@@ -146,7 +148,15 @@ def main():
     logging.info(f'Started installation of Node.js app {args.app_name}')
     api = OpalstackAPITool(API_HOST, API_BASE_URI, args.opal_token, args.opal_user, args.opal_password)
     appinfo = api.get(f'/app/read/{args.app_uuid}')
-    appdir = f'/home/{appinfo["app_user"]}/apps/{appinfo["name"]}'
+    appdir = f'/home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}'
+
+    # get current LTS nodejs
+    cmd = f'mkdir {appdir}/node'
+    doit = run_command(cmd)
+    download(LTS_NODE_URL, f'{appdir}/node.tar.xz')
+    cmd = f'tar xf {appdir}/node.tar.xz --strip 1'
+    doit = run_command(cmd, cwd=f'{appdir}/node')
+    CMD_ENV['PATH'] = f'{appdir}/node/bin:{CMD_ENV["PATH"]}'
 
     # get current LTS nodejs
     cmd = f'mkdir {appdir}/node'
@@ -183,7 +193,7 @@ def main():
                 PIDFILE="{appdir}/tmp/node.pid"
                 NODE={appdir}/node/bin/node
 
-                if [ -e "$PIDFILE" ] && (pgrep -u {appinfo["app_user"]} | grep -x -f $PIDFILE &> /dev/null); then
+                if [ -e "$PIDFILE" ] && (pgrep -u {appinfo["osuser_name"]} | grep -x -f $PIDFILE &> /dev/null); then
                   echo "Node.js for {appinfo["name"]} already running."
                   exit 99
                 fi
@@ -207,12 +217,12 @@ def main():
 
                 PID=$(cat $PIDFILE)
 
-                if [ -e "$PIDFILE" ] && (pgrep -u {appinfo["app_user"]} | grep -x -f $PIDFILE &> /dev/null); then
+                if [ -e "$PIDFILE" ] && (pgrep -u {appinfo["osuser_name"]} | grep -x -f $PIDFILE &> /dev/null); then
                   kill $PID
                   sleep 3
                 fi
 
-                if [ -e "$PIDFILE" ] && (pgrep -u {appinfo["app_user"]} | grep -x -f $PIDFILE &> /dev/null); then
+                if [ -e "$PIDFILE" ] && (pgrep -u {appinfo["osuser_name"]} | grep -x -f $PIDFILE &> /dev/null); then
                   echo "Node.js did not stop, killing it."
                   sleep 3
                   kill -9 $PID
@@ -257,9 +267,8 @@ def main():
 
     # finished, push a notice
     msg = f'See README in app directory for more info.'
-    payload = json.dumps({'id': args.app_uuid, 'init_created': True,
-                          'note': msg})
-    finished=api.post('/app/init_created/', payload)
+    payload = json.dumps([{'id': args.app_uuid}])
+    finished=api.post('/app/installed/', payload)
 
     logging.info(f'Completed installation of Node.js app {args.app_name}')
 

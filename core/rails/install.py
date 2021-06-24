@@ -17,7 +17,7 @@ from urllib.parse import urlparse
 import urllib.request
 
 API_HOST = os.environ.get('API_URL').strip('https://').strip('http://')
-API_BASE_URI = '/api/v0'
+API_BASE_URI = '/api/v1'
 CMD_ENV = {'PATH': '/usr/local/bin:/usr/bin:/bin','UMASK': '0002',}
 
 
@@ -134,13 +134,13 @@ def main():
     logging.info(f'Started installation of Rails app {args.app_name}')
     api = OpalstackAPITool(API_HOST, API_BASE_URI, args.opal_token, args.opal_user, args.opal_password)
     appinfo = api.get(f'/app/read/{args.app_uuid}')
-    appdir = f'/home/{appinfo["app_user"]}/apps/{appinfo["name"]}'
+    appdir = f'/home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}'
     CMD_ENV = {'PATH': f'/opt/bin:{appdir}/myproject/bin:{appdir}/env/bin:/usr/local/bin:/usr/bin:/bin',
                'LD_LIBRARY_PATH': '/opt/lib',
                'TMPDIR': f'{appdir}/tmp',
                'GEM_HOME': f'{appdir}/env',
                'UMASK': '0002',
-               'HOME': f'/home/{appinfo["app_user"]}',}
+               'HOME': f'/home/{appinfo["osuser_name"]}',}
 
     # make dirs env and tmp
     os.mkdir(f'{appdir}/env')
@@ -181,7 +181,7 @@ def main():
                 PATH=/opt/bin:$PROJECTDIR/bin:{appdir}/env/bin:$PATH
                 PIDFILE="$PROJECTDIR/tmp/pids/server.pid"
 
-                if [ -e "$PIDFILE" ] && (pgrep -u {appinfo["app_user"]} | grep -x -f $PIDFILE &> /dev/null); then
+                if [ -e "$PIDFILE" ] && (pgrep -u {appinfo["osuser_name"]} | grep -x -f $PIDFILE &> /dev/null); then
                   echo "Rails for {appinfo["name"]} already running."
                   exit 99
                 fi
@@ -210,12 +210,12 @@ def main():
 
                 PID=$(cat $PIDFILE)
 
-                if [ -e "$PIDFILE" ] && (pgrep -u {appinfo["app_user"]} | grep -x -f $PIDFILE &> /dev/null); then
+                if [ -e "$PIDFILE" ] && (pgrep -u {appinfo["osuser_name"]} | grep -x -f $PIDFILE &> /dev/null); then
                   kill $PID
                   sleep 3
                 fi
 
-                if [ -e "$PIDFILE" ] && (pgrep -u {appinfo["app_user"]} | grep -x -f $PIDFILE &> /dev/null); then
+                if [ -e "$PIDFILE" ] && (pgrep -u {appinfo["osuser_name"]} | grep -x -f $PIDFILE &> /dev/null); then
                   echo "Rails did not stop, killing it."
                   sleep 3
                   kill -9 $PID
@@ -291,9 +291,8 @@ def main():
 
     # finished, push a notice
     msg = f'See README in app directory for more info.'
-    payload = json.dumps({'id': args.app_uuid, 'init_created': True,
-                          'note': msg})
-    finished=api.post('/app/init_created/', payload)
+    payload = json.dumps([{'id': args.app_uuid}])
+    finished=api.post('/app/installed/', payload)
 
     logging.info(f'Completed installation of Rails app {args.app_name}')
 

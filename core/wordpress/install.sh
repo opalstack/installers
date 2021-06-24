@@ -39,7 +39,7 @@ then
      exit 1
 else
     # Get the server's UUID and verify the app exists, and thus the file schema exists.
-    if serverjson=`curl -s --fail --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN"  $API_URL/api/v0/app/read/$UUID` ;then
+    if serverjson=`curl -s --fail --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN"  $API_URL/api/v1/app/read/$UUID` ;then
          printf $CGREEN2
          echo 'UUID validation and server lookup OK.'
          printf $CEND
@@ -51,7 +51,7 @@ else
     fi;
 
     # Get the the account email address for wp install.
-    if accountjson=`curl -s --fail --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN"  $API_URL/api/v0/account/info/` ;then
+    if accountjson=`curl -s --fail --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN"  $API_URL/api/v1/account/info/` ;then
          printf $CGREEN2
          echo 'Admin email lookup OK.'
          printf $CEND
@@ -64,9 +64,29 @@ else
 
 
     # create database
-    dbsend='{"name": "'"$APPNAME"'", "server": "'"$serverid"'" }'
-    if dbjson=`curl -s --fail --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN" -d"$dbsend"  $API_URL/api/v0/mariadb/autoadd/` ;then
-         export $(echo $dbjson| jq -r '@sh "DBNAME=\(.name) CHARSET=\(.charset) DBID=\(.id) DBUSERID=\(.dbuserid) DBUSER=\(.dbuser) DBPWD=\(.default_password) SERVER=\(.server)"' )
+    dbusend='[{"name": "'"$APPNAME"'", "server": "'"$serverid"'" }]'
+    # create database user
+    if dbjson=`curl -s --fail --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN" -d"$dbusend"  $API_URL/api/v1/mariauser/create/` ;then
+         export $(echo $dbjson| jq -r '@sh "DBUSERID=\(.[0].id) DBUSER=\(.[0].name) DBPWD=\(.[0].default_password)"' )
+         printf $CGREEN2
+         echo 'DB user creation OK.'
+         printf $CEND
+    else
+         printf $CRED2
+         echo 'DB user creation failed.'
+         exit 1
+    fi;
+    eval DBUSER=$DBUSER
+    eval DBUSERID=$DBUSERID
+    eval DBPWD=$DBPWD
+    echo "Database User Created"
+    echo $DBUSER
+    echo $DBUSERID
+
+    dbsend='[{ "name": '\"$APPNAME\"', "server": '\"$serverid\"', "dbusers_readwrite": ['\"$DBUSERID\"'] }]'
+    echo $dbsend
+    if dbjson=`curl -s --fail --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN" -d"$dbsend"  $API_URL/api/v1/mariadb/create/` ;then
+         export $(echo $dbjson| jq -r '@sh "DBNAME=\(.[0].name) DBID=\(.[0].id) "' )
          printf $CGREEN2
          echo 'DB creation OK.'
          printf $CEND
@@ -76,19 +96,16 @@ else
          exit 1
     fi;
     eval DBNAME=$DBNAME
-    eval DBUSERID=$DBUSERID
     eval DBID=$DBID
-    eval DBUSER=$DBUSER
-    eval DBPWD=$DBPWD
+
     echo "Database Created"
     echo $DBNAME
-    echo $DBUSER
 
     echo "waiting for 10 seconds so the DB and DBUser can be created"
     sleep 10
 
     # check if the DB has been installed, initial request.
-    if DBOKJSON=`curl -s --fail --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN"  $API_URL/api/v0/mariadb/read/$DBID` ;then
+    if DBOKJSON=`curl -s --fail --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN"  $API_URL/api/v1/mariadb/read/$DBID` ;then
          printf $CYELLOW2
          echo 'DB lookup.'
          printf $CEND
@@ -105,7 +122,7 @@ else
     echo $DBOK
 
     sleep 5
-    if DBOKJSON=`curl -s --fail --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN"  $API_URL/api/v0/mariadb/read/$DBID` ;then
+    if DBOKJSON=`curl -s --fail --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN"  $API_URL/api/v1/mariadb/read/$DBID` ;then
          printf $CYELLOW2
          echo 'DB lookup.'
          printf $CEND
@@ -121,7 +138,7 @@ else
     printf $CEND
 
     # check if the DB USER has been installed, initial request.
-    if DBUOKJSON=`curl -s --fail --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN"  $API_URL/api/v0/mariauser/read/$DBUSERID` ;then
+    if DBUOKJSON=`curl -s --fail --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN"  $API_URL/api/v1/mariauser/read/$DBUSERID` ;then
          printf $CYELLOW2
          echo 'DB User lookup.'
          printf $CEND
@@ -138,7 +155,7 @@ else
     echo $DBUOK
 
     sleep 5
-    if DBUOKJSON=`curl -s --fail --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN"  $API_URL/api/v0/mariauser/read/$DBUSERID` ;then
+    if DBUOKJSON=`curl -s --fail --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN"  $API_URL/api/v1/mariauser/read/$DBUSERID` ;then
          printf $CYELLOW2
          echo 'DB User lookup.'
          printf $CEND
@@ -168,6 +185,7 @@ else
     firstLine=`echo "${coreinstall}" | head -1`
     echo $firstLine
     # Send JSON installed OK.
-    /usr/bin/curl -s -X POST --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN" -d'{"id": "'"$UUID"'", "init_created":true, "note":"'"Admin user: $USER / $firstLine"'"}' $API_URL/api/v0/app/init_created/
-
+    /usr/bin/curl -s -X POST --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN" -d'[{"id": "'$UUID'"}]' $API_URL/api/v1/app/installed/
+    # Create notice
+    /usr/bin/curl -s -X POST --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN" -d'[{"type": "D", "body":"'"Created wordpress app $APPNAME with Admin user: $USER / $firstLine"'"}]' $API_URL/api/v1/notice/create/
 fi;
