@@ -158,14 +158,6 @@ def main():
     doit = run_command(cmd, cwd=f'{appdir}/node')
     CMD_ENV['PATH'] = f'{appdir}/node/bin:{CMD_ENV["PATH"]}'
 
-    # get current LTS nodejs
-    cmd = f'mkdir {appdir}/node'
-    doit = run_command(cmd)
-    download(LTS_NODE_URL, f'{appdir}/node.tar.xz')
-    cmd = f'tar xf {appdir}/node.tar.xz --strip 1'
-    doit = run_command(cmd, cwd=f'{appdir}/node')
-    CMD_ENV['PATH'] = f'{appdir}/node/bin:{CMD_ENV["PATH"]}'
-
     # make app.js
     NEWLINE = '\\n'
     appjs = textwrap.dedent(f'''\
