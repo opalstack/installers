@@ -187,5 +187,5 @@ else
     # Send JSON installed OK.
     /usr/bin/curl -s -X POST --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN" -d'[{"id": "'$UUID'"}]' $API_URL/api/v1/app/installed/
     # Create notice
-    /usr/bin/curl -s -X POST --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN" -d'[{"type": "D", "body":"'"Created wordpress app $APPNAME with Admin user: $USER / $firstLine"'"}]' $API_URL/api/v1/notice/create/
+    /usr/bin/curl -s -X POST --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN" -d'[{"type": "D", "content":"'"Created wordpress app $APPNAME with Admin user: $USER / $firstLine"'"}]' $API_URL/api/v1/notice/create/
 fi;
