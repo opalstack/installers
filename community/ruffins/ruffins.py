@@ -153,6 +153,7 @@ def main():
 
     # Create fs schema, [collect, templates, www]
     os.mkdir(f'{appdir}/collect')
+    os.mkdir(f'{appdir}/collect/img')
     os.mkdir(f'{appdir}/templates')
     os.mkdir(f'{appdir}/templates/extends')
     os.mkdir(f'{appdir}/www')
