@@ -221,7 +221,7 @@ def main():
   <meta name="description" content="">
   <meta name="keywords" content="">
   <meta name="author" content="">
-  <link rel="stylesheet" href="tailwind.css">
+  <link rel="stylesheet" href="{{SITE_URL}}tailwind.css">
   <script src="//unpkg.com/alpinejs" defer></script>
 </head>
 <body>
@@ -335,7 +335,8 @@ be copied into *'www'*.
                     loader=jinja2.FileSystemLoader('templates'),
                     )
                 j.globals={
-                    'TITLE':'Ruffins'
+                    'TITLE':'Ruffins',
+                    'SITE_URL': '/'
                     }
 
                 # Convert jinja templates into actual html files.
