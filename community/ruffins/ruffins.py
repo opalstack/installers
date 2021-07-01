@@ -346,12 +346,12 @@ be copied into *'www'*.
                     w_root = 'www'
                     if root == 'templates/extends': continue
                     if root != 'templates':
-                        w_root = f"www/{root.strip('templates/')}"
+                        w_root = f"www/{root[10:]}"
                         os.mkdir(w_root)
                     for f_name in f_names:
                         if f_name.split('.')[1] != 'html': continue
                         try:
-                            jt = j.get_template(f"{root.strip('templates/')}/{f_name}")
+                            jt = j.get_template(f"{root[10:]}/{f_name}")
                             f = open(f"{w_root}/{f_name}", "wb")
                             f.write(jt.render().encode('utf8'))
                             f.close()
