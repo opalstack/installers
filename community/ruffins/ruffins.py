@@ -308,7 +308,7 @@ be copied into *'www'*.
 </div>
 </div>
 {% endblock %}
-                '''
+                '''.encode("utf-8")
     create_file(f'{appdir}/templates/index.html', index_html, perms=0o600)
 
     # Create generate
