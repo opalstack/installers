@@ -352,8 +352,8 @@ be copied into *'www'*.
                         if f_name.split('.')[1] != 'html': continue
                         try:
                             jt = j.get_template(f"{root.strip('templates/')}/{f_name}")
-                            f = open(f"{w_root}/{f_name}", "w")
-                            f.write(jt.render())
+                            f = open(f"{w_root}/{f_name}", "wb")
+                            f.write(jt.render().encode('utf8'))
                             f.close()
                         except Exception as ex:
                             print(ex)
