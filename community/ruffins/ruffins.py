@@ -384,12 +384,12 @@ be copied into *'www'*.
     startit = run_command(cmd)
 
     # Create symlink to www
-    static_symlink=api.post('/app/create/', json.dumps({
+    static_symlink=api.post('/app/create/', json.dumps([{
         'name': f'{appinfo["name"]}_www',
         'osuser': appinfo["osuser"],
         'type':'SLS',
         'json': {'sym_link_path': f'{appdir}/www/'}
-        }))
+        }]))
 
     # make README
     readme = textwrap.dedent(f'''\
