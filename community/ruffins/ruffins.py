@@ -63,7 +63,7 @@ class OpalstackAPITool():
         print(connread)
         return json.loads(connread)
 
-def create_file(path, contents, writemode='w', perms=0o600):
+def create_file(path, contents, writemode='wb', perms=0o600):
     """make a file, perms are passed as octal"""
     with open(path, writemode) as f:
         f.write(contents.encode('utf8'))
