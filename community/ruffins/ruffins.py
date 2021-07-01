@@ -371,11 +371,11 @@ be copied into *'www'*.
     trumpet_png_f.close()
 
     # Run pip
-    pip_cmd = f'pip install -r {appdir}/requirements.txt'
+    pip_cmd = f'pip install --user -r {appdir}/requirements.txt'
     run_pip_cmd = run_command(pip_cmd)
 
     # Run NPM
-    npm_cmd = f'pip install -r {appdir}/requirements.txt'
+    npm_cmd = f'{appdir}/node/bin/npm install'
     run_npm_cmd = run_command(npm_cmd)
 
     # Run Generate
