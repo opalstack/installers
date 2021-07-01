@@ -312,7 +312,7 @@ be copied into *'www'*.
     create_file(f'{appdir}/templates/index.html', index_html, perms=0o600)
 
     # Create generate
-    geny = textwrap.dedent(f'''\
+    geny = textwrap.dedent('''\
                 #!/bin/python3
                 import jinja2
                 import os
