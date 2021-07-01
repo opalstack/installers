@@ -66,7 +66,7 @@ class OpalstackAPITool():
 def create_file(path, contents, writemode='w', perms=0o600):
     """make a file, perms are passed as octal"""
     with open(path, writemode) as f:
-        f.write(contents)
+        f.write(contents.encode('utf8'))
     os.chmod(path, perms)
     logging.info(f'Created file {path} with permissions {oct(perms)}')
 
@@ -308,7 +308,7 @@ be copied into *'www'*.
 </div>
 </div>
 {% endblock %}
-                '''.encode("utf-8")
+                '''
     create_file(f'{appdir}/templates/index.html', index_html, perms=0o600)
 
     # Create generate
