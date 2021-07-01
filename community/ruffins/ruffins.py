@@ -384,10 +384,9 @@ be copied into *'www'*.
     startit = run_command(cmd)
 
     # Create symlink to www
-    app_info=api.get(f'app/read/{args.app_uuid}')
     static_symlink=api.post('/app/create/', {
         'name': f'{appinfo["name"]}_www',
-        'osuser':app_info.osuser,
+        'osuser': appinfo["osuser"],
         'type':'SLS',
         'json': {'sym_link_path': f'{appdir}/www/'}
         })
