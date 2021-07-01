@@ -387,7 +387,7 @@ be copied into *'www'*.
         'name': f'{appinfo["name"]}_www',
         'osuser':app_info.osuser,
         'type':'SLS',
-        'json': {'sym_link_path': f'{appdir}/www}/'}
+        'json': {'sym_link_path': f'{appdir}/www/'}
         })
 
     # make README
