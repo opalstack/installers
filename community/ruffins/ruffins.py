@@ -17,7 +17,7 @@ from urllib.parse import urlparse
 API_HOST = os.environ.get('API_URL').strip('https://').strip('http://')
 API_BASE_URI = '/api/v1'
 CMD_ENV = {'PATH': '/usr/local/bin:/usr/bin:/bin','UMASK': '0002',}
-NODE_URL = 'https://nodejs.org/dist/v16.4.0/node-v16.4.0-linux-x64.tar.xz'
+NODE_URL = 'https://nodejs.org/download/release/v14.17.0/node-v14.17.0-linux-x64.tar.xz'
 
 class OpalstackAPITool():
     """simple wrapper for http.client get and post"""
@@ -175,7 +175,8 @@ def main():
                     "chart.js": "^2.9.4",
                     "daisyui": "^1.6.0",
                     "postcss": "^8.2.4",
-                    "tailwindcss": "^2.0.2"
+                    "tailwindcss": "^2.0.2",
+                    "tailwindcss-cli": "latest"
                   },
                   "devDependencies": {
                     "@tailwindcss/forms": "^0.2.1",
@@ -371,7 +372,7 @@ be copied into *'www'*.
     trumpet_png_f.close()
 
     # Run pip
-    pip_cmd = f'pip install --user -r {appdir}/requirements.txt'
+    pip_cmd = f'pip3 install --user -r {appdir}/requirements.txt'
     run_pip_cmd = run_command(pip_cmd)
 
     # Run NPM
