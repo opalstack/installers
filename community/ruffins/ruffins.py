@@ -359,8 +359,8 @@ be copied into *'www'*.
                             print(ex)
 
                 # Tailwind CSS Build
-                subprocess.run(['./node/bin/npx tailwindcss-cli@latest build -o tailwind.build' ],shell=True)
-                subprocess.run(['./node/bin/npx tailwindcss-cli@latest build -i tailwind.build -o www/tailwind.css'], env={'NODE_EN':'production'},shell=True)
+                subprocess.run(['./node/bin/npx tailwindcss-cli@latest build -o tailwind.build' ], env={'PATH':f'{os.getcwd()}/node/bin'},shell=True)
+                subprocess.run(['./node/bin/npx tailwindcss-cli@latest build -i tailwind.build -o www/tailwind.css'], env={'NODE_EN':'production','PATH':f'{os.getcwd()}/node/bin'},shell=True)
                 subprocess.run(['rm','-f','tailwind.build'])
                 ''')
     create_file(f'{appdir}/generate', geny, perms=0o700)
