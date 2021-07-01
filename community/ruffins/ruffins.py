@@ -17,7 +17,7 @@ from urllib.parse import urlparse
 API_HOST = os.environ.get('API_URL').strip('https://').strip('http://')
 API_BASE_URI = '/api/v1'
 CMD_ENV = {'PATH': '/usr/local/bin:/usr/bin:/bin','UMASK': '0002',}
-16_NODE_URL = 'https://nodejs.org/dist/v16.4.0/node-v16.4.0-linux-x64.tar.xz'
+NODE_URL = 'https://nodejs.org/dist/v16.4.0/node-v16.4.0-linux-x64.tar.xz'
 
 class OpalstackAPITool():
     """simple wrapper for http.client get and post"""
@@ -146,7 +146,7 @@ def main():
     # get 16 nodejs
     cmd = f'mkdir {appdir}/node'
     doit = run_command(cmd)
-    download(16_NODE_URL, f'{appdir}/node.tar.xz')
+    download(NODE_URL, f'{appdir}/node.tar.xz')
     cmd = f'tar xf {appdir}/node.tar.xz --strip 1'
     doit = run_command(cmd, cwd=f'{appdir}/node')
     CMD_ENV['PATH'] = f'{appdir}/node/bin:{CMD_ENV["PATH"]}'
