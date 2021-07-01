@@ -380,7 +380,7 @@ be copied into *'www'*.
     run_npm_cmd = run_command(npm_cmd)
 
     # Run Generate
-    subprocess.run([f'{appdir}/generate'], cwd=appdir ,shell=True)
+    subprocess.run([f'{appdir}/generate'], cwd=appdir, env=os.environ.copy(), shell=True)
 
     # Create symlink to www
     static_symlink=api.post('/app/create/', json.dumps([{
