@@ -165,7 +165,7 @@ def main():
                   "version": "0.0.1",
                   "description": "A talented static site generator.",
                   "scripts": {
-                    "test": "echo \"Error: no test specified\" && exit 1"
+                    "test": "echo \\"Error: no test specified\\" && exit 1"
                   },
                   "author": "John Augustino Spounias",
                   "license": "APACHE2",
