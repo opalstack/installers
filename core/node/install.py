@@ -151,7 +151,7 @@ def main():
     appdir = f'/home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}'
 
     # get current LTS nodejs
-    cmd = f'mkdir {appdir}/node'
+    cmd = f'mkdir -p {appdir}/node'
     doit = run_command(cmd)
     download(LTS_NODE_URL, f'{appdir}/node.tar.xz')
     cmd = f'tar xf {appdir}/node.tar.xz --strip 1'
