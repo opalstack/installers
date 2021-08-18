@@ -294,7 +294,7 @@ def main():
     payload = json.dumps([{'id': args.app_uuid}])
     finished=api.post('/app/installed/', payload)
 
-    logging.info(f'Completed installation of Gitea app {args.app_name}')
+    logging.info(f'Completed installation of Gitea app {args.app_name} - {msg}')
 
 
 if __name__ == '__main__':
