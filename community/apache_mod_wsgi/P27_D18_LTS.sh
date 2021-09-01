@@ -50,8 +50,7 @@ else
 fi;
 echo $PORT
 
-#export APPROOT=$HOME/apps/$APPNAME
-export APPROOT=$HOME/apps/lts
+export APPROOT=$HOME/apps/$APPNAME
 mkdir -p $APPROOT/src $APPROOT/tmp $APPROOT/lib/ $APPROOT/lib/python2.7 $APPROOT/lib/python2.7/site-packages
 export TMPDIR=$APPROOT/tmp
 
