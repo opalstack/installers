@@ -49,10 +49,14 @@ else
     fi;
 fi;
 echo $PORT
-export APPROOT=$HOME/apps/$APPNAME
+
+#export APPROOT=$HOME/apps/$APPNAME
+export APPROOT=$HOME/apps/lts
 mkdir -p $APPROOT/src $APPROOT/tmp $APPROOT/lib/ $APPROOT/lib/python2.7 $APPROOT/lib/python2.7/site-packages
 export TMPDIR=$APPROOT/tmp
 
+
+echo "
 /bin/wget https://github.com/opalstack/installers/raw/master/community/apache_mod_wsgi/httpd-2.4.41.tar.gz -O $APPROOT/src/httpd-2.4.41.tar.gz
 /bin/tar zxf $APPROOT/src/httpd-2.4.41.tar.gz --directory=$APPROOT/src
 cd $APPROOT/src/httpd-2.4.41 && ./configure --srcdir=$APPROOT/src/httpd-2.4.41 --prefix=$APPROOT/apache2 --enable-mods-shared=all --enable-mpms-shared=all --with-mpm=prefork
@@ -66,6 +70,8 @@ cd $APPROOT/src/httpd-2.4.41 && make --directory=$APPROOT/src/httpd-2.4.41 insta
 
 export PYTHONPATH=$APPROOT/lib/python2.7/site-packages
 /bin/easy_install-2.7 --prefix=$APPROOT https://github.com/opalstack/installers/raw/master/community/apache_mod_wsgi/Django-1.8.19.tar.gz
+" > $APPROOT/build.sh
+
 
 # add installed OK
 /usr/bin/curl -s -X POST --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN" -d'[{"id": "'$UUID'"}]' $API_URL/api/v1/app/installed/
