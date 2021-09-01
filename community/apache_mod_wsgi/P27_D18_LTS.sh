@@ -97,7 +97,9 @@ LoadModule setenvif_module   modules/mod_setenvif.so
 LoadModule wsgi_module       modules/mod_wsgi.so
 LoadModule unixd_module      modules/mod_unixd.so
 
-LogFormat \"%{X-Forwarded-For}i %l %u %t \"%r\" %>s %b \"%{Referer}i\" \"%{User-Agent}i\"\" combined
+
+
+LogFormat \"%{X-Forwarded-For}i %l %u %t \\\"%r\\\" %>s %b \\\"%{Referer}i\\\" \\\"%{User-Agent}i\\\"\" combined
 CustomLog \${LOG_ROOT}/access_\${APP_NAME}.log combined
 ErrorLog \${LOG_ROOT}/error_\${APP_NAME}.log
 
