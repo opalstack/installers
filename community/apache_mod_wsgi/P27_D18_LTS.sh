@@ -121,7 +121,7 @@ WSGIProcessGroup \${APP_NAME}
 WSGIRestrictEmbedded On
 WSGILazyInitialization On
 WSGIScriptAlias / \${PROJ_ROOT}/\${PROJ_NAME}/wsgi.py
-" > $APPROOT/apache2/conf/httpd.conf
+" > $APPROOT/httpd.conf.example
 
 
 
