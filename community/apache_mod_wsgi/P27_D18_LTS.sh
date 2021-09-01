@@ -1,8 +1,9 @@
 #! /bin/bash
 
-# python2.7 is end of life, and so is pip and many other tools which were available.
+# python2.7 is end of life, and so is pip and many other tools which were available are no longer so.
+# this will build a very basic Django install which will require packages from the projects being imported
+# to be placed in the site-packages directory manually.
 # https://pip.pypa.io/en/latest/development/release-process/#python-2-support
-
 
 CRED2='\033[1;91m'        # Red
 CGREEN2='\033[1;92m'      # Green
@@ -22,9 +23,6 @@ i) UUID=${OPTARG};;
 n) APPNAME=$OPTARG;;
 esac
 done
-
-export APPROOT=$HOME/apps/$APPNAME/
-export TMPDIR=$APPROOT/tmp
 
 printf 'Started at %(%F %T)T\n' >> /home/$USER/logs/apps/$APPNAME/install.log
 
@@ -51,35 +49,24 @@ else
     fi;
 fi;
 echo $PORT
+export APPROOT=$HOME/apps/$APPNAME
+mkdir -p $APPROOT/src $APPROOT/tmp $APPROOT/lib/ $APPROOT/lib/python2.7 $APPROOT/lib/python2.7/site-packages
+export TMPDIR=$APPROOT/tmp
 
-mkdir -p $APPROOT/src $APPROOT/tmp
+/bin/wget https://github.com/opalstack/installers/raw/master/community/apache_mod_wsgi/httpd-2.4.41.tar.gz -O $APPROOT/src/httpd-2.4.41.tar.gz
+/bin/tar zxf $APPROOT/src/httpd-2.4.41.tar.gz --directory=$APPROOT/src
+cd $APPROOT/src/httpd-2.4.41 && ./configure --prefix=$APPROOT/apache2 --enable-mods-shared=all --enable-mpms-shared=all --with-mpm=prefork
+cd $APPROOT/src/httpd-2.4.41 && make
+cd $APPROOT/src/httpd-2.4.41 && make install
+/bin/wget https://github.com/opalstack/installers/raw/master/community/apache_mod_wsgi/mod_wsgi-4.7.0.tar.gz -O $APPROOT/src/mod_wsgi-4.7.0.tar.gz
+/bin/tar zxf $APPROOT/src/mod_wsgi-4.7.0.tar.gz --directory=$APPROOT/src
+/bin/cd $APPROOT/src/mod_wsgi-4.7.0 && ./configure --with-python=/usr/bin/python2.7 --with-apxs=$APPROOT/apache2/bin/apxs
+/bin/cd $APPROOT/src/mod_wsgi-4.7.0 && make
+/bin/cd $APPROOT/src/mod_wsgi-4.7.0 && make install
 
-
-# cd src
-wget http://archive.apache.org/dist/httpd/httpd-2.4.41.tar.gz -O $APPROOT/src/httpd-2.4.41.tar.gz
-tar zxf httpd-2.4.41.tar.gz
-
-# cd httpd-2.4.41
-./configure --prefix=$HOME/apps/$APPNAME/apache2 --enable-mods-shared=all --enable-mpms-shared=all --with-mpm=prefork
-make
-make install
-
-# cd ..
-wget https://github.com/GrahamDumpleton/mod_wsgi/archive/4.7.0.tar.gz
-tar zxf 4.7.0.tar.gz
-
-# cd mod_wsgi-4.7.0
-./configure --with-python=/usr/bin/python2.7 --with-apxs=$HOME/apps/$APPNAME/apache2/bin/apxs
-make
-make install
-
-# cd $HOME/apps/$APP
-
-pip2.7 install django==1.8.7 -t $HOME/
-
+export PYTHONPATH=$APPROOT/lib/python2.7/site-packages
+/bin/easy_install-2.7 --prefix=$HOME/foobar https://github.com/opalstack/installers/raw/master/community/apache_mod_wsgi/Django-1.8.19.tar.gz
 django-admin startproject myproject
 
-
-
-sed -r -i "s/^ALLOWED_HOSTS = \[\]/ALLOWED_HOSTS = \['\*'\]/" myproject/myproject/settings.py
-sed -r -i "/^DATABASES =/, /^}$/ s/^/#/" myproject/myproject/settings.py
+#sed -r -i "s/^ALLOWED_HOSTS = \[\]/ALLOWED_HOSTS = \['\*'\]/" myproject/myproject/settings.py
+#sed -r -i "/^DATABASES =/, /^}$/ s/^/#/" myproject/myproject/settings.py
