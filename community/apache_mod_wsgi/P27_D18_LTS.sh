@@ -62,6 +62,7 @@ cd $APPROOT/src/httpd-2.4.41 && make --directory=$APPROOT/src/httpd-2.4.41 insta
 /bin/cd $APPROOT/src/mod_wsgi-4.7.0 && make --directory=$APPROOT/src/mod_wsgi-4.7.0 install
 export PYTHONPATH=$APPROOT/lib/python2.7/site-packages
 /bin/easy_install-2.7 --prefix=$APPROOT https://github.com/opalstack/installers/raw/master/community/apache_mod_wsgi/Django-1.8.19.tar.gz
+/bin/cp httpd.conf.example apache2/conf/httpd.conf
 " > $APPROOT/build.sh
 /bin/chmod +x $APPROOT/build.sh
 
