@@ -1,10 +1,7 @@
 #! /bin/bash
 
-# python2.7 is end of life, and so is pip and many other tools which were available are no longer so.
-# this will build a very basic Django install which will require packages from the projects being imported
-# to be placed in the site-packages directory manually.
-# https://pip.pypa.io/en/latest/development/release-process/#python-2-support
-
+# this will build a very basic Django install which will require packages from
+# the projects being imported to be placed in the site-packages directory manually.
 CRED2='\033[1;91m'        # Red
 CGREEN2='\033[1;92m'      # Green
 CYELLOW2='\033[1;93m'     # Yellow
@@ -49,11 +46,8 @@ else
     fi;
 fi;
 echo $PORT
-
 export APPROOT=$HOME/apps/$APPNAME
 mkdir -p $APPROOT/src $APPROOT/tmp $APPROOT/lib/ $APPROOT/lib/python2.7 $APPROOT/lib/python2.7/site-packages
-export TMPDIR=$APPROOT/tmp
-
 
 echo "
 /bin/wget https://github.com/opalstack/installers/raw/master/community/apache_mod_wsgi/httpd-2.4.41.tar.gz -O $APPROOT/src/httpd-2.4.41.tar.gz
@@ -66,16 +60,9 @@ cd $APPROOT/src/httpd-2.4.41 && make --directory=$APPROOT/src/httpd-2.4.41 insta
 /bin/cd $APPROOT/src/mod_wsgi-4.7.0 && ./configure --srcdir=$APPROOT/src/mod_wsgi-4.7.0 --with-python=/usr/bin/python2.7 --with-apxs=$APPROOT/apache2/bin/apxs
 /bin/cd $APPROOT/src/mod_wsgi-4.7.0 && make --directory=$APPROOT/src/mod_wsgi-4.7.0
 /bin/cd $APPROOT/src/mod_wsgi-4.7.0 && make --directory=$APPROOT/src/mod_wsgi-4.7.0 install
-
 export PYTHONPATH=$APPROOT/lib/python2.7/site-packages
 /bin/easy_install-2.7 --prefix=$APPROOT https://github.com/opalstack/installers/raw/master/community/apache_mod_wsgi/Django-1.8.19.tar.gz
 " > $APPROOT/build.sh
 
-
 # add installed OK
 /usr/bin/curl -s -X POST --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN" -d'[{"id": "'$UUID'"}]' $API_URL/api/v1/app/installed/
-
-
-#django-admin startproject myproject
-#sed -r -i "s/^ALLOWED_HOSTS = \[\]/ALLOWED_HOSTS = \['\*'\]/" myproject/myproject/settings.py
-#sed -r -i "/^DATABASES =/, /^}$/ s/^/#/" myproject/myproject/settings.py
