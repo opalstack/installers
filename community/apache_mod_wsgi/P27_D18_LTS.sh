@@ -66,7 +66,11 @@ cd $APPROOT/src/httpd-2.4.41 && make install
 
 export PYTHONPATH=$APPROOT/lib/python2.7/site-packages
 /bin/easy_install-2.7 --prefix=$HOME/foobar https://github.com/opalstack/installers/raw/master/community/apache_mod_wsgi/Django-1.8.19.tar.gz
-django-admin startproject myproject
 
+# add installed OK
+/usr/bin/curl -s -X POST --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN" -d'[{"id": "'$UUID'"}]' $API_URL/api/v1/app/installed/
+
+
+#django-admin startproject myproject
 #sed -r -i "s/^ALLOWED_HOSTS = \[\]/ALLOWED_HOSTS = \['\*'\]/" myproject/myproject/settings.py
 #sed -r -i "/^DATABASES =/, /^}$/ s/^/#/" myproject/myproject/settings.py
