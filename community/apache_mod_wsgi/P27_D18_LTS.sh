@@ -57,9 +57,9 @@ cd $APPROOT/src/httpd-2.4.41 && make --directory=$APPROOT/src/httpd-2.4.41
 cd $APPROOT/src/httpd-2.4.41 && make --directory=$APPROOT/src/httpd-2.4.41 install
 /bin/wget https://github.com/opalstack/installers/raw/master/community/apache_mod_wsgi/mod_wsgi-4.7.0.tar.gz -O $APPROOT/src/mod_wsgi-4.7.0.tar.gz
 /bin/tar zxf $APPROOT/src/mod_wsgi-4.7.0.tar.gz --directory=$APPROOT/src
-/bin/cd $APPROOT/src/mod_wsgi-4.7.0 && ./configure --srcdir=$APPROOT/src/mod_wsgi-4.7.0 --with-python=/usr/bin/python2.7 --with-apxs=$APPROOT/apache2/bin/apxs
-/bin/cd $APPROOT/src/mod_wsgi-4.7.0 && make --directory=$APPROOT/src/mod_wsgi-4.7.0
-/bin/cd $APPROOT/src/mod_wsgi-4.7.0 && make --directory=$APPROOT/src/mod_wsgi-4.7.0 install
+cd $APPROOT/src/mod_wsgi-4.7.0 && ./configure --srcdir=$APPROOT/src/mod_wsgi-4.7.0 --with-python=/usr/bin/python2.7 --with-apxs=$APPROOT/apache2/bin/apxs
+cd $APPROOT/src/mod_wsgi-4.7.0 && make --directory=$APPROOT/src/mod_wsgi-4.7.0
+cd $APPROOT/src/mod_wsgi-4.7.0 && make --directory=$APPROOT/src/mod_wsgi-4.7.0 install
 export PYTHONPATH=$APPROOT/lib/python2.7/site-packages
 /bin/easy_install-2.7 --prefix=$APPROOT https://github.com/opalstack/installers/raw/master/community/apache_mod_wsgi/Django-1.8.19.tar.gz
 /bin/cp $APPROOT/src/httpd.conf.example $APPROOT/apache2/conf/httpd.conf
