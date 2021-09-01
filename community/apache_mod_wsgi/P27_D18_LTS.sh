@@ -65,7 +65,7 @@ cd $APPROOT/src/httpd-2.4.41 && make install
 /bin/cd $APPROOT/src/mod_wsgi-4.7.0 && make install
 
 export PYTHONPATH=$APPROOT/lib/python2.7/site-packages
-/bin/easy_install-2.7 --prefix=$HOME/foobar https://github.com/opalstack/installers/raw/master/community/apache_mod_wsgi/Django-1.8.19.tar.gz
+/bin/easy_install-2.7 --prefix=$APPROOT https://github.com/opalstack/installers/raw/master/community/apache_mod_wsgi/Django-1.8.19.tar.gz
 
 # add installed OK
 /usr/bin/curl -s -X POST --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN" -d'[{"id": "'$UUID'"}]' $API_URL/api/v1/app/installed/
