@@ -143,6 +143,12 @@ After the builds are complete apache can be started/stopped with these commands,
 ./apache2/bin/apachectl stop
 ./apache2/bin/apachectl restart
 
+Once the stack is installed all pythonic operations should be performed within the virtualenv.
+This will not modify the shell environment beyond installing an updated pip2.7 in ~/local.
+And its purpose is to init the venv's copy, not to be executed from there in the future.
+
+If you had any issues durring installation please double-check the order of operations.
+
 Please see the command notes for more info.
 
  build_apache.sh
