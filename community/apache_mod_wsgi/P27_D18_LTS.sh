@@ -77,7 +77,7 @@ Define APP_NAME ${APPNAME}
 Define APP_PORT ${PORT}
 Define PROJ_NAME myproject
 Define APP_ROOT /home/\${OPAL_USER}/apps/\${APP_NAME}
-Define VIRT_ENV \${APP_ROOT}/env
+Define VIRT_ENV \${APP_ROOT}/venv
 Define PROJ_ROOT \${APP_ROOT}/\${PROJ_NAME}
 Define LOG_ROOT /home/\${OPAL_USER}/logs/apps/\${APP_NAME}
 
@@ -118,7 +118,7 @@ WSGIDaemonProcess \${APP_NAME} processes=2 threads=12 python-home=\${VIRT_ENV} p
 WSGIProcessGroup \${APP_NAME}
 WSGIRestrictEmbedded On
 WSGILazyInitialization On
-WSGIScriptAlias / \${PROJ_ROOT}/\${PROJ_NAME}/\${PROJ_NAME}/wsgi.py
+WSGIScriptAlias / \${PROJ_ROOT}/\${PROJ_NAME}/wsgi.py
 " > $APPROOT/src/httpd.conf.example
 
 echo "
