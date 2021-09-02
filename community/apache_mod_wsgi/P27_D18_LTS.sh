@@ -118,13 +118,13 @@ WSGIScriptAlias / \${PROJ_ROOT}/\${PROJ_NAME}/wsgi.py
 " > $APPROOT/src/httpd.conf.example
 
 echo "#! /bin/bash
+export PATH=\$HOME/.local/bin:\$PATH
 ~/.local/bin/virtualenv venv
 source $APPROOT/venv/bin/activate
 pip2.7 install django==1.8.7
 django-admin startproject myproject
 " > $APPROOT/install_django.sh
 /bin/chmod +x $APPROOT/install_django.sh
-
 
 echo "Welcome to the Opalstack Apache/mod_wsgi/Django1.8/Python2.7 LTS Stack installer.
 This package includes 3 shell scripts and the directory schema required to build the stack.
