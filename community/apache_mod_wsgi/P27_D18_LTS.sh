@@ -46,7 +46,7 @@ echo $PORT
 export APPROOT=$HOME/apps/$APPNAME
 mkdir -p $APPROOT/src $APPROOT/tmp $APPROOT/lib/ $APPROOT/lib/python2.7 $APPROOT/lib/python2.7/site-packages
 
-echo "
+echo "#! /bin/bash
 /bin/wget https://github.com/opalstack/installers/raw/master/community/apache_mod_wsgi/httpd-2.4.41.tar.gz -O $APPROOT/src/httpd-2.4.41.tar.gz
 /bin/tar zxf $APPROOT/src/httpd-2.4.41.tar.gz --directory=$APPROOT/src
 cd $APPROOT/src/httpd-2.4.41 && ./configure --srcdir=$APPROOT/src/httpd-2.4.41 --prefix=$APPROOT/apache2 --enable-mods-shared=all --enable-mpms-shared=all --with-mpm=prefork
@@ -61,15 +61,14 @@ cd $APPROOT/src/mod_wsgi-4.7.0 && make --directory=$APPROOT/src/mod_wsgi-4.7.0 i
 " > $APPROOT/build_apache.sh
 /bin/chmod +x $APPROOT/build_apache.sh
 
-echo "
+echo "#! /bin/bash
 export PATH=\$HOME/.local/bin:\$PATH
 pip2.7 install --user -U pip==20.3.4
 pip2.7 install --user  virtualenv
 " > $APPROOT/update_pip.sh
 /bin/chmod +x $APPROOT/update_pip.sh
 
-echo "
-Define OPAL_USER ${USER}
+echo "Define OPAL_USER ${USER}
 Define APP_NAME ${APPNAME}
 Define APP_PORT ${PORT}
 Define PROJ_NAME myproject
@@ -118,7 +117,7 @@ WSGILazyInitialization On
 WSGIScriptAlias / \${PROJ_ROOT}/\${PROJ_NAME}/wsgi.py
 " > $APPROOT/src/httpd.conf.example
 
-echo "
+echo "#! /bin/bash
 ~/.local/bin/virtualenv venv
 source $APPROOT/venv/bin/activate
 pip2.7 install django==1.8.7
@@ -127,8 +126,7 @@ django-admin startproject myproject
 /bin/chmod +x $APPROOT/install_django.sh
 
 
-echo "
-Welcome to the Opalstack Apache/mod_wsgi/Django1.8/Python2.7 LTS Stack installer.
+echo "Welcome to the Opalstack Apache/mod_wsgi/Django1.8/Python2.7 LTS Stack installer.
 This package includes 3 shell scripts and the directory schema required to build the stack.
 They should be executed in a particular order. However you may not need to run each command on each install.
 The required order is,
