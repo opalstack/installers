@@ -62,6 +62,7 @@ cd $APPROOT/src/mod_wsgi-4.7.0 && make --directory=$APPROOT/src/mod_wsgi-4.7.0 i
 /bin/chmod +x $APPROOT/build_apache.sh
 
 echo "#! /bin/bash
+export PATH=\$HOME/.local/bin:\$PATH
 pip2.7 install --user -U pip==20.3.4
 pip2.7 install --user  virtualenv
 " > $APPROOT/update_pip.sh
@@ -130,9 +131,8 @@ They should be executed in a particular order. However you may not need to run e
 The required order is,
 
 ./build_apache.sh
-export PATH=\$HOME/.local/bin:\$PATH
 ./update_pip.sh
-./install_django.sh
+source install_django.sh
 
 After the builds are complete apache can be started/stopped with these commands,
 
