@@ -63,8 +63,8 @@ cd $APPROOT/src/mod_wsgi-4.7.0 && make --directory=$APPROOT/src/mod_wsgi-4.7.0 i
 
 echo "#! /bin/bash
 export PATH=\$HOME/.local/bin:\$PATH
-pip2.7 install --user -U pip==20.3.4
-pip2.7 install --user  virtualenv
+~/.local/bin/pip2.7 install --user -U pip==20.3.4
+~/.local/bin/pip2.7 install --user  virtualenv
 ~/.local/bin/virtualenv venv
 source $APPROOT/venv/bin/activate
 pip2.7 install django==1.8.7
