@@ -71,7 +71,6 @@ pip2.7 install --user  virtualenv
 " > $APPROOT/pip27.sh
 /bin/chmod +x $APPROOT/pip27.sh
 
-
 echo "
 Define OPAL_USER ${USER}
 Define APP_NAME ${APPNAME}
@@ -94,8 +93,6 @@ LoadModule rewrite_module    modules/mod_rewrite.so
 LoadModule setenvif_module   modules/mod_setenvif.so
 LoadModule wsgi_module       modules/mod_wsgi.so
 LoadModule unixd_module      modules/mod_unixd.so
-
-
 
 LogFormat \"%{X-Forwarded-For}i %l %u %t \\\"%r\\\" %>s %b \\\"%{Referer}i\\\" \\\"%{User-Agent}i\\\"\" combined
 CustomLog \${LOG_ROOT}/access_\${APP_NAME}.log combined
@@ -124,21 +121,13 @@ WSGILazyInitialization On
 WSGIScriptAlias / \${PROJ_ROOT}/\${PROJ_NAME}/wsgi.py
 " > $APPROOT/src/httpd.conf.example
 
-
-
 echo "
 ~/.local/bin/virtualenv venv
 source $APPROOT/venv/bin/activate
 pip2.7 install django==1.8.7
+django-admin startproject myproject
 " > $APPROOT/install_django.sh
 /bin/chmod +x $APPROOT/install_django.sh
-
-
-
-
-
-
-
 
 # add installed OK
 /usr/bin/curl -s -X POST --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN" -d'[{"id": "'$UUID'"}]' $API_URL/api/v1/app/installed/
