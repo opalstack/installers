@@ -118,7 +118,7 @@ WSGIDaemonProcess \${APP_NAME} processes=2 threads=12 python-home=\${VIRT_ENV} p
 WSGIProcessGroup \${APP_NAME}
 WSGIRestrictEmbedded On
 WSGILazyInitialization On
-WSGIScriptAlias / \${PROJ_ROOT}/\${PROJ_NAME}/wsgi.py
+WSGIScriptAlias / \${PROJ_ROOT}/\${PROJ_NAME}/\${PROJ_NAME}/wsgi.py
 " > $APPROOT/src/httpd.conf.example
 
 echo "
