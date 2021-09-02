@@ -132,8 +132,8 @@ They should be executed in a particular order. However you may not need to run e
 The required order is,
 
 ./build_apache.sh
-./update_pip.sh
-./install_django.sh
+source update_pip.sh
+source install_django.sh
 
 After the builds are complete apache can be started/stopped with these commands,
 
