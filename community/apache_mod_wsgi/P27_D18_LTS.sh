@@ -65,8 +65,12 @@ echo "#! /bin/bash
 export PATH=\$HOME/.local/bin:\$PATH
 pip2.7 install --user -U pip==20.3.4
 pip2.7 install --user  virtualenv
-" > $APPROOT/update_pip.sh
-/bin/chmod +x $APPROOT/update_pip.sh
+~/.local/bin/virtualenv venv
+source $APPROOT/venv/bin/activate
+pip2.7 install django==1.8.7
+django-admin startproject myproject
+" > $APPROOT/install_django.sh
+/bin/chmod +x $APPROOT/install_django.sh
 
 echo "Define OPAL_USER ${USER}
 Define APP_NAME ${APPNAME}
@@ -117,21 +121,12 @@ WSGILazyInitialization On
 WSGIScriptAlias / \${PROJ_ROOT}/\${PROJ_NAME}/wsgi.py
 " > $APPROOT/src/httpd.conf.example
 
-echo "#! /bin/bash
-~/.local/bin/virtualenv venv
-source $APPROOT/venv/bin/activate
-pip2.7 install django==1.8.7
-django-admin startproject myproject
-" > $APPROOT/install_django.sh
-/bin/chmod +x $APPROOT/install_django.sh
-
 echo "Welcome to the Opalstack Apache/mod_wsgi/Django1.8/Python2.7 LTS Stack installer.
 This package includes 3 shell scripts and the directory schema required to build the stack.
 They should be executed in a particular order. However you may not need to run each command on each install.
 The required order is,
 
 ./build_apache.sh
-./update_pip.sh
 source install_django.sh
 
 After the builds are complete apache can be started/stopped with these commands,
@@ -153,12 +148,6 @@ Please see the command notes for more info.
 This script builds apache and mod_wsgi. It will copy the default config into place.
 The default config will not function without the install_django script being ran
 or last mile configuration in the case of flask or another python based framework.
-
- update_pip.sh
----------------
-This updates pip to 20.3, which is the last version python2 will support.
-You only need to execute this once per Shell User, so if you plan on having
-many legacy django apps under 1 Shell User, you only need to run this once.
 
  install_django.sh
 -------------------
