@@ -68,8 +68,8 @@ echo "
 export PATH=\$HOME/.local/bin:\$PATH
 pip2.7 install --user -U pip==20.3.4
 pip2.7 install --user  virtualenv
-" > $APPROOT/pip27.sh
-/bin/chmod +x $APPROOT/pip27.sh
+" > $APPROOT/update_pip.sh
+/bin/chmod +x $APPROOT/update_pip.sh
 
 echo "
 Define OPAL_USER ${USER}
