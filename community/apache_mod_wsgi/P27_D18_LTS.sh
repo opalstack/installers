@@ -131,8 +131,8 @@ The required order is,
 
 ./build_apache.sh
 export PATH=\$HOME/.local/bin:\$PATH
-source update_pip.sh
-source install_django.sh
+./update_pip.sh
+./install_django.sh
 
 After the builds are complete apache can be started/stopped with these commands,
 
