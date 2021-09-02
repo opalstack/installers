@@ -62,7 +62,6 @@ cd $APPROOT/src/mod_wsgi-4.7.0 && make --directory=$APPROOT/src/mod_wsgi-4.7.0 i
 /bin/chmod +x $APPROOT/build_apache.sh
 
 echo "#! /bin/bash
-export PATH=\$HOME/.local/bin:\$PATH
 pip2.7 install --user -U pip==20.3.4
 pip2.7 install --user  virtualenv
 " > $APPROOT/update_pip.sh
@@ -118,7 +117,6 @@ WSGIScriptAlias / \${PROJ_ROOT}/\${PROJ_NAME}/wsgi.py
 " > $APPROOT/src/httpd.conf.example
 
 echo "#! /bin/bash
-export PATH=\$HOME/.local/bin:\$PATH
 ~/.local/bin/virtualenv venv
 source $APPROOT/venv/bin/activate
 pip2.7 install django==1.8.7
@@ -132,6 +130,7 @@ They should be executed in a particular order. However you may not need to run e
 The required order is,
 
 ./build_apache.sh
+export PATH=\$HOME/.local/bin:\$PATH
 source update_pip.sh
 source install_django.sh
 
