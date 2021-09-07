@@ -40,5 +40,5 @@ be copied into *'www'*.
 
 Internally we use a lot of Tailwind CSS. Nothing seems to beat Jinja/Alpine/Tailwind.
 The opalstack homepage is built with a very similar stack to Ruffins. We wanted to provide 
-a similar build experiance to our users which lead to the development of Ruffins Generator. 
+a similar build experience to our users which lead to the development of Ruffins Generator. 
 
