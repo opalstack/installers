@@ -1,5 +1,5 @@
 This script builds wp2static plugin which can be used to deploy a no-PHP copy of a WordPress site. 
-Which can be usefule for dealing with malware or large volumes of HTTP requests. 
+Which can be useful for dealing with malware or large volumes of HTTP requests. 
 
 To deploy this fix perform the following steps, 
 
