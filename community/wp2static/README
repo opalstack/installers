@@ -7,7 +7,7 @@ To deploy this fix perform the following steps,
 `chmod +x build.sh`
 2. Execute it. This should leave a zip file in `~/Downloads`. 
 3. Install the Zip file via the plugin manager in WordPress. 
-4. Configure the plugin. The most important setting to modify is the URL name. It sould match the site URL. 
+4. Configure the plugin. The most important setting to modify is the URL name. It should match the site URL. 
 5. Generate the static content. 
 6. Create symbolic link type apps for both the static path and wp-content. The static path will be `/home/YOU/apps/APPNAME/wp-content/uploads/wp2static-processed-site/`
 7. Update the domain's site record to use the static app at the root URI '/' and the wp-content symlink app at `/wp-content/` URI
