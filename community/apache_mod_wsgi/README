@@ -1,0 +1,27 @@
+This package includes 2 shell scripts and the directory schema required to build a Apache/mod_wsgi/Django1.8/Python2.7 stack.
+They should be executed in a particular order. The required order is,
+
+./build_apache.sh
+source install_django.sh
+
+After the builds are complete apache can be started/stopped with these commands,
+
+./apache2/bin/apachectl start
+./apache2/bin/apachectl stop
+./apache2/bin/apachectl restart
+
+Once the stack is installed all pythonic operations should be performed within the virtualenv.
+This will not modify the shell environment beyond installing an updated pip2.7 in ~/local.
+Its purpose is to init the venv.
+
+ build_apache.sh
+-----------------
+This script builds apache and mod_wsgi. It will copy the default config into place.
+The default config will not function without the install_django script being ran
+or last mile configuration in the case of flask or another python based framework.
+
+ install_django.sh
+-------------------
+This installs Django 1.8.7, which is the target LTS, and the best upgrade path to Python3.
+It is also the best canidate for downgrading if you need a lower version.
+It also builds the virtualenv and a default project wsgi file.
