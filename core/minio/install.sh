@@ -1,5 +1,5 @@
 # Install minio
-echo 'Mino server'
+echo 'Minio server'
 /bin/mkdir -p  $HOME/apps/$APPNAME/bin/minio
 /bin/wget https://dl.min.io/server/minio/release/linux-amd64/minio -O  $HOME/apps/$APPNAME/bin/minio
 /bin/chmod +x $HOME/apps/$APPNAME/bin/minio
