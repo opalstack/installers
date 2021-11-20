@@ -46,6 +46,8 @@ else
     /usr/bin/touch /home/$USER/apps/$APPNAME/passwd
     PASSWORD=$(date +%s | sha256sum | base64 | head -c 16 ; echo)
     DIGEST="$( /bin/printf "%s:%s:%s" "$USER" "$APPNAME" "$PASSWORD" | /bin/md5sum | awk '{print $1}' )"
+    /bin/setfacl -m u:apache:rwx /home/$USER/logs/apps/$APPNAME/$UUID
+    /bin/setfacl -m u:apache:rwx /home/$USER/logs/apps/$APPNAME/
     /bin/printf "%s:%s:%s\n" "$USER" "$APPNAME" "$DIGEST" >> "/home/$USER/apps/$APPNAME/passwd"
     /usr/bin/curl -s -X POST --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN" -d'[{"id": "'$UUID'"}]' $API_URL/api/v1/app/installed/
 fi;
