@@ -17,7 +17,7 @@ from urllib.parse import urlparse
 API_HOST = os.environ.get('API_URL').strip('https://').strip('http://')
 API_BASE_URI = '/api/v1'
 CMD_ENV = {'PATH': '/usr/local/bin:/usr/bin:/bin','UMASK': '0002',}
-BUILDPY_URL = 'TODO'
+BUILDPY_URL = 'https://raw.githubusercontent.com/opalstack/installers/master/core/django/build_python.sh'
 
 
 class OpalstackAPITool():
@@ -154,10 +154,13 @@ def main():
     CMD_ENV['TMPDIR'] = f'{appdir}/tmp'
 
     # install python and deps
-    download(LTS_NODE_URL, f'{appdir}/node.tar.xz')
+    download(BUILDPY_URL, f'{appdir}/build_python.sh', perms=0o700)
+    cmd = f'{appdir}/build_python.sh {appdir}/python'
+    doit = run_command(cmd)
+    logging.info(f'Installed Python at {appdir}/python')
 
     # create virtualenv
-    cmd = f'/bin/python3.6 -m venv {appdir}/env'
+    cmd = f'{appdir}/python/bin/python3 -m venv {appdir}/env'
     doit = run_command(cmd)
     logging.info(f'Created virtualenv at {appdir}/env')
 
