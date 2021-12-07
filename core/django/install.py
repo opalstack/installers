@@ -17,6 +17,7 @@ from urllib.parse import urlparse
 API_HOST = os.environ.get('API_URL').strip('https://').strip('http://')
 API_BASE_URI = '/api/v1'
 CMD_ENV = {'PATH': '/usr/local/bin:/usr/bin:/bin','UMASK': '0002',}
+BUILDPY_URL = 'TODO'
 
 
 class OpalstackAPITool():
@@ -151,6 +152,9 @@ def main():
     os.mkdir(f'{appdir}/tmp', 0o700)
     logging.info(f'Created directory {appdir}/tmp')
     CMD_ENV['TMPDIR'] = f'{appdir}/tmp'
+
+    # install python and deps
+    download(LTS_NODE_URL, f'{appdir}/node.tar.xz')
 
     # create virtualenv
     cmd = f'/bin/python3.6 -m venv {appdir}/env'
