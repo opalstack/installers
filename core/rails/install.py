@@ -152,7 +152,7 @@ def main():
     doit = run_command(cmd, cwd=f'{appdir}/env')
 
     # install rails and puma
-    cmd = f'gem install -N rails puma rake:12.3.3'
+    cmd = f'gem install -N rails:6.1.4.4 puma rake:12.3.3'
     doit = run_command(cmd, cwd=f'{appdir}', env=CMD_ENV)
 
     # make rails project
