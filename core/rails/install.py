@@ -135,8 +135,8 @@ def main():
     api = OpalstackAPITool(API_HOST, API_BASE_URI, args.opal_token, args.opal_user, args.opal_password)
     appinfo = api.get(f'/app/read/{args.app_uuid}')
     appdir = f'/home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}'
-    CMD_ENV = {'PATH': f'/opt/bin:{appdir}/myproject/bin:{appdir}/env/bin:/usr/local/bin:/usr/bin:/bin',
-               'LD_LIBRARY_PATH': '/opt/lib',
+    CMD_ENV = {'PATH': f'/usr/sqlite330/bin:{appdir}/myproject/bin:{appdir}/env/bin:/usr/local/bin:/usr/bin:/bin',
+               'LD_LIBRARY_PATH': '/usr/sqlite330/lib',
                'TMPDIR': f'{appdir}/tmp',
                'GEM_HOME': f'{appdir}/env',
                'UMASK': '0002',
