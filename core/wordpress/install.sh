@@ -180,6 +180,7 @@ else
     $HOME/bin/wp cli update
     $HOME/bin/wp core download --path=/home/$USER/apps/$APPNAME
     $HOME/bin/wp core config --dbhost=localhost --dbname=$DBNAME --dbuser=$DBUSER --dbpass=$DBPWD --path=/home/$USER/apps/$APPNAME
+    $HOME/bin/wp option set default_comment_status closed --path=/home/$USER/apps/$APPNAME
     /usr/bin/chmod 644 wp-config.php
     coreinstall=`$HOME/bin/wp core install --admin_name=$USER --admin_email=$accountemail --url="_" --title="Wordpress Blog" --path=/home/$USER/apps/$APPNAME`
     firstLine=`echo "${coreinstall}" | head -1`
