@@ -178,7 +178,7 @@ def main():
 
                 # no need to edit below this line
                 APP_PORT={appinfo["port"]}
-                PATH=/opt/bin:$PROJECTDIR/bin:{appdir}/env/bin:$PATH
+                PATH=/usr/sqlite330/bin:/opt/bin:$PROJECTDIR/bin:{appdir}/env/bin:$PATH
                 PIDFILE="$PROJECTDIR/tmp/pids/server.pid"
 
                 if [ -e "$PIDFILE" ] && (pgrep -u {appinfo["osuser_name"]} | grep -x -f $PIDFILE &> /dev/null); then
@@ -187,7 +187,7 @@ def main():
                 fi
 
                 cd $PROJECTDIR
-                LD_LIBRARY_PATH=/opt/lib GEM_HOME={appdir}/env $PROJECTDIR/bin/bundle exec rails s -e $RAILS_ENV -p $APP_PORT -d -P $PIDFILE
+                LD_LIBRARY_PATH=/usr/sqlite330/lib:/opt/lib GEM_HOME={appdir}/env $PROJECTDIR/bin/bundle exec rails s -e $RAILS_ENV -p $APP_PORT -d -P $PIDFILE
 
                 echo "Started Rails for {appinfo["name"]}."
                 ''')
