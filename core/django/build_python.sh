@@ -18,7 +18,7 @@ echo "finished building openssl."
 # python
 echo "building python..."
 export PATH=$PYDIR/bin:$PATH
-export CPPFLAGS="-I$HOME/apps/testdjango/python/include $CPPFLAGS"
+export CPPFLAGS="-I$PYDIR/include $CPPFLAGS"
 cd $PYDIR/src
 wget -q https://www.python.org/ftp/python/3.10.1/Python-3.10.1.tar.xz
 tar xf Python-3.10.1.tar.xz
