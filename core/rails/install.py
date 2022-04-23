@@ -286,7 +286,7 @@ def main():
 
 
                     server {{
-                        # change the next to llines to use your site domain
+                        # change the next two lines to use your site domain
                         # and your project's public directory
                         server_name localhost;
                         root /home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}/myproject/public;
@@ -420,11 +420,29 @@ def main():
                         cd {appdir}/yourproject
                         bundle install
 
-                4. Edit {appdir}/start_puma and {appdir}/stop_puma
+                5. Edit {appdir}/start_puma and {appdir}/stop_puma
                    to change the PROJECTDIR variable on line 4 to point to your
-                   project directory.
+                   project directory, for example:
 
-                5. Run the following commands to restart your Rails instance:
+                        PROJECTDIR=$HOME/apps/$APPNAME/yourproject
+
+                6. Edit {appdir}/nginx.conf to change the Puma socket path and server root to point to your project directory, for example:
+
+                        ...
+                        upstream puma {{
+                          server unix:/home/shell_user_name/apps/app_name/yourproject/tmp/sockets/puma.sock fail_timeout=0;
+                        }}
+
+
+                        server {{
+                            # change the next two lines to use your site domain
+                            # and your project's public directory
+                            server_name localhost;
+                            root /home/shell_user_name/apps/app_name/yourproject;
+                        ...
+
+
+                7. Run the following commands to restart your Rails instance:
 
                         mkdir -p {appdir}/yourproject/tmp/pids
                         mkdir -p {appdir}/yourproject/tmp/sockets
