@@ -1,4 +1,4 @@
-#! /usr/bin/python3.6
+#!/usr/bin/python3.6
 
 import argparse
 import sys
@@ -19,6 +19,8 @@ import urllib.request
 API_HOST = os.environ.get('API_URL').strip('https://').strip('http://')
 API_BASE_URI = '/api/v1'
 CMD_ENV = {'PATH': '/usr/local/bin:/usr/bin:/bin','UMASK': '0002',}
+LTS_NODE_URL = 'https://nodejs.org/dist/v16.13.1/node-v16.13.1-linux-x64.tar.xz'
+
 
 
 class OpalstackAPITool():
@@ -64,6 +66,16 @@ class OpalstackAPITool():
         return json.loads(conn.getresponse().read())
 
 
+
+def run_command(cmd, env, cwd=None):
+    """runs a command, returns output"""
+    logging.info(f'Running: {cmd}')
+    try:
+        result = subprocess.check_output(shlex.split(cmd), cwd=cwd, env=env)
+    except subprocess.CalledProcessError as e:
+        logging.debug(e.output)
+    return result
+
 def create_file(path, contents, writemode='w', perms=0o600):
     """make a file, perms are passed as octal"""
     with open(path, writemode) as f:
@@ -86,16 +98,7 @@ def gen_password(length=20):
     return ''.join(secrets.choice(chars) for i in range(length))
 
 
-def run_command(cmd, cwd=None, env=CMD_ENV):
-    """runs a command, returns output"""
-    logging.info(f'Running: {cmd}')
-    try:
-        result = subprocess.check_output(shlex.split(cmd), cwd=cwd, env=env)
-    except subprocess.CalledProcessError as e:
-        logging.debug(e.output)
-    return result
-
-def add_cronjob(cronjob):
+def add_cronjob(cronjob, env):
     """appends a cron job to the user's crontab"""
     homedir = os.path.expanduser('~')
     tmpname = f'{homedir}/.tmp{gen_password()}'
@@ -104,8 +107,8 @@ def add_cronjob(cronjob):
     tmp.write(f'{cronjob}\n')
     tmp.close()
     cmd = f'crontab {tmpname}'
-    doit = run_command(cmd)
-    cmd = run_command(f'rm -f {tmpname}')
+    doit = run_command(cmd, env)
+    cmd = run_command(f'rm -f {tmpname}', env)
     logging.info(f'Added cron job: {cronjob}')
 
 
@@ -135,100 +138,239 @@ def main():
     api = OpalstackAPITool(API_HOST, API_BASE_URI, args.opal_token, args.opal_user, args.opal_password)
     appinfo = api.get(f'/app/read/{args.app_uuid}')
     appdir = f'/home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}'
-    CMD_ENV = {'PATH': f'/usr/sqlite330/bin:{appdir}/myproject/bin:{appdir}/env/bin:/usr/local/bin:/usr/bin:/bin',
-               'LD_LIBRARY_PATH': '/usr/sqlite330/lib',
+    CMD_ENV = {'PATH': f'/opt/rh/rh-ruby30/root/usr/local/bin:/opt/rh/rh-ruby30/root/usr/bin:/opt/bin:{appdir}/myproject/bin:{appdir}/env/bin:/usr/local/bin:/usr/bin:/bin',
+            'LD_LIBRARY_PATH': '/opt/rh/rh-ruby30/root/usr/local/lib64:/opt/rh/rh-ruby30/root/usr/lib64:/opt/lib',
                'TMPDIR': f'{appdir}/tmp',
                'GEM_HOME': f'{appdir}/env',
                'UMASK': '0002',
                'HOME': f'/home/{appinfo["osuser_name"]}',}
-
     # make dirs env and tmp
     os.mkdir(f'{appdir}/env')
     os.mkdir(f'{appdir}/tmp')
 
+    # install node into env
+    download(LTS_NODE_URL, f'{appdir}/node.tar.xz')
+    cmd = f'tar xf {appdir}/node.tar.xz --strip 1'
+    doit = run_command(cmd, CMD_ENV, cwd=f'{appdir}/env')
+
     # install yarn into env
     download('https://yarnpkg.com/latest.tar.gz', f'{appdir}/tmp/yarn.tar.gz', perms=0o700)
     cmd = f'tar zxf {appdir}/tmp/yarn.tar.gz --strip 1'
-    doit = run_command(cmd, cwd=f'{appdir}/env')
+    doit = run_command(cmd, CMD_ENV, cwd=f'{appdir}/env')
 
     # install rails and puma
-    cmd = f'gem install -N rails:6.1.4.4 puma rake:12.3.3'
-    doit = run_command(cmd, cwd=f'{appdir}', env=CMD_ENV)
+    cmd = f'gem install -N --no-user-install -n {appdir}/env/bin rails puma'
+    doit = run_command(cmd, CMD_ENV, cwd=f'{appdir}')
 
     # make rails project
     cmd = f'rails new myproject'
-    doit = run_command(cmd, cwd=f'{appdir}', env=CMD_ENV)
+    doit = run_command(cmd, CMD_ENV, cwd=f'{appdir}')
     pid_dir = f'{appdir}/myproject/tmp/pids'
     if not os.path.isdir(pid_dir):
         os.mkdir(pid_dir)
+    socket_dir = f'{appdir}/myproject/tmp/sockets'
+    if not os.path.isdir(socket_dir):
+        os.mkdir(socket_dir)
 
-    # DELETEME when rails no longer ships broken webpack
-    cmd = f'''/bin/sed -i -e 's/check_yarn_integrity: true/check_yarn_integrity: false/' {appdir}/myproject/config/webpacker.yml'''
-    doit = run_command(cmd, cwd=f'{appdir}', env=CMD_ENV)
-
-    # start script
-    start_script = textwrap.dedent(f'''\
+    # puma start script
+    start_puma = textwrap.dedent(f'''\
                 #!/bin/bash
 
+                # name of your app, don't change this
+                APPNAME={appinfo["name"]}
+
                 # change the next line to your Rails project directory
-                PROJECTDIR='{appdir}/myproject'
+                PROJECTDIR=$HOME/apps/$APPNAME/myproject
 
                 # set your rails env, eg development or production
                 RAILS_ENV=development
 
                 # no need to edit below this line
-                APP_PORT={appinfo["port"]}
-                PATH=/usr/sqlite330/bin:/opt/bin:$PROJECTDIR/bin:{appdir}/env/bin:$PATH
                 PIDFILE="$PROJECTDIR/tmp/pids/server.pid"
+                export PATH=/opt/rh/rh-ruby30/root/usr/local/bin:/opt/rh/rh-ruby30/root/usr/bin:/opt/bin:$PROJECTDIR/bin:$HOME/apps/$APPNAME/env/bin:$PATH
+                export GEM_PATH=/opt/rh/rh-ruby30/root/usr/share/gems/:$HOME/apps/$APPNAME/env/gems
+                export LD_LIBRARY_PATH=/opt/rh/rh-ruby30/root/usr/local/lib64:/opt/rh/rh-ruby30/root/usr/lib64:/opt/lib
+                export GEM_HOME=$HOME/apps/$APPNAME/env
 
-                if [ -e "$PIDFILE" ] && (pgrep -u {appinfo["osuser_name"]} | grep -x -f $PIDFILE &> /dev/null); then
-                  echo "Rails for {appinfo["name"]} already running."
+                if [ -e "$PIDFILE" ] && (pgrep -u seantest | grep -x -f $PIDFILE &> /dev/null); then
+                  echo "$APPNAME puma already running!"
                   exit 99
                 fi
 
                 cd $PROJECTDIR
-                LD_LIBRARY_PATH=/usr/sqlite330/lib:/opt/lib GEM_HOME={appdir}/env $PROJECTDIR/bin/bundle exec rails s -e $RAILS_ENV -p $APP_PORT -d -P $PIDFILE
+                START="$PROJECTDIR/bin/bundle exec puma -b unix:///$PROJECTDIR/tmp/sockets/puma.sock --pidfile $PIDFILE"
+                ( nohup $START > $PROJECTDIR/log/$RAILS_ENV.log 2>&1 & )
 
-                echo "Started Rails for {appinfo["name"]}."
+                echo "$APPNAME puma started"
                 ''')
+    create_file(f'{appdir}/start_puma', start_puma, perms=0o700)
+
+    # puma stop script
+    stop_puma = textwrap.dedent(f'''\
+                #!/bin/bash
+
+                PROJECTNAME=myproject
+
+                # no need to edit below this line unless your project directory
+                # is not in your app directory
+                APPNAME={appinfo["name"]}
+                APPDIR="$HOME/apps/$APPNAME"
+                PROJECTDIR="$APPDIR/$PROJECTNAME"
+                APP_PORT={appinfo["port"]}
+                PIDFILE="$PROJECTDIR/tmp/pids/server.pid"
+
+                PID=$( pgrep -a -f "$PROJECTDIR/tmp/sockets/puma.sock" | awk '{{print $1}}') || {{ echo "$APPNAME puma not running"; exit 99; }}
+                echo $PID > $PIDFILE
+                kill $PID
+                sleep 3
+                pgrep -o -f "$PROJECTDIR/tmp/sockets/puma.sock" && {{
+                  echo "$APPNAME did not stop, killing it."
+                  kill -9 $PID
+                }}
+                rm -f $PIDFILE
+                echo "$APPNAME puma stopped"
+                ''')
+    create_file(f'{appdir}/stop_puma', stop_puma, perms=0o700)
+
+    # nginx start script
+    start_nginx = textwrap.dedent(f'''\
+                #!/bin/bash
+
+                APPNAME={appinfo["name"]}
+
+                APPDIR=$HOME/apps/$APPNAME
+                ERRLOG=$HOME/logs/apps/$APPNAME/nginx_error.log
+                /usr/sbin/nginx -c $APPDIR/nginx/nginx.conf -p $APPDIR -e $ERRLOG
+                echo "$APPNAME nginx started"
+
+                ''')
+    create_file(f'{appdir}/start_nginx', start_nginx, perms=0o700)
+
+    # nginx stop script
+    stop_nginx = textwrap.dedent(f'''\
+                #!/bin/bash
+
+                APPNAME={appinfo["name"]}
+
+                APPDIR=$HOME/apps/$APPNAME
+                ERRLOG=$HOME/logs/apps/$APPNAME/nginx_error.log
+                /usr/sbin/nginx -c $APPDIR/nginx/nginx.conf -p $APPDIR -e $ERRLOG -s quit
+                echo "$APPNAME nginx stopped"
+
+                ''')
+    create_file(f'{appdir}/stop_nginx', stop_nginx, perms=0o700)
+
+    # nginx config
+    nginx_conf = textwrap.dedent(f'''\
+                pid /home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}/tmp/nginx.pid;
+
+                events {{}}
+
+                http {{
+                    include /etc/nginx/mime.types;
+                    default_type application/octet-stream;
+
+                    client_body_temp_path /home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}/tmp/client_body;
+                    fastcgi_temp_path     /home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}/tmp/fastcgi_temp;
+                    proxy_temp_path       /home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}/tmp/proxy_temp;
+                    scgi_temp_path        /home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}/tmp/scgi_temp;
+                    uwsgi_temp_path       /home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}/tmp/uwsgi_temp;
+
+                    log_format main '$http_x_forwarded_for - $remote_user [$time_local] "$request" $status $body_bytes_sent "$http_referer" "$http_user_agent"';
+                    access_log /home/{appinfo["osuser_name"]}/logs/apps/{appinfo["name"]}/nginx_access.log main;
+                    error_log /home/{appinfo["osuser_name"]}/logs/apps/{appinfo["name"]}/nginx_error.log;
+
+                    upstream puma {{
+                      server unix:/home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}/myproject/tmp/sockets/puma.sock fail_timeout=0;
+                    }}
+
+
+                    server {{
+                        # change the next two lines to use your site domain
+                        # and your project's public directory
+                        server_name localhost;
+                        root /home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}/myproject/public;
+
+                        listen {appinfo["port"]};
+
+                	    try_files $uri/index.html $uri @puma;
+
+                        location @puma {{
+                            proxy_pass http://puma;
+                            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                            proxy_set_header Host $http_host;
+                            proxy_redirect off;
+                        }}
+                    }}
+                }}
+                ''')
+    os.mkdir(f'{appdir}/nginx')
+    create_file(f'{appdir}/nginx/nginx.conf', nginx_conf, perms=0o600)
+
+    # main start script
+    start_script = textwrap.dedent(f'''\
+                #!/bin/bash
+
+                # name of your app, don't change this
+                APPNAME={appinfo["name"]}
+
+                $HOME/apps/$APPNAME/start_puma
+                $HOME/apps/$APPNAME/start_nginx
+                                ''')
     create_file(f'{appdir}/start', start_script, perms=0o700)
 
-    # stop script
+    # main stop script
     stop_script = textwrap.dedent(f'''\
                 #!/bin/bash
 
+                # name of your app, don't change this
+                APPNAME={appinfo["name"]}
+
+                $HOME/apps/$APPNAME/stop_nginx
+                $HOME/apps/$APPNAME/stop_puma
+                ''')
+    create_file(f'{appdir}/stop', stop_script, perms=0o700)
+
+    # restart script
+    restart_script = textwrap.dedent(f'''\
+                #!/bin/bash
+
+                # name of your app, don't change this
+                APPNAME={appinfo["name"]}
+
+                $HOME/apps/$APPNAME/stop
+                $HOME/apps/$APPNAME/start
+                ''')
+    create_file(f'{appdir}/restart', restart_script, perms=0o700)
+
+    # setenv script
+    setenv = textwrap.dedent(f'''\
+                #!/bin/bash
+
+                # name of your app, don't change this
+                APPNAME={appinfo["name"]}
+
                 # change the next line to your Rails project directory
-                PROJECTDIR='{appdir}/myproject'
+                PROJECTDIR=$HOME/apps/$APPNAME/myproject
+
+                # set your rails env, eg development or production
+                RAILS_ENV=development
 
                 # no need to edit below this line
                 PIDFILE="$PROJECTDIR/tmp/pids/server.pid"
-
-                if [ ! -e "$PIDFILE" ]; then
-                    echo "$PIDFILE missing, maybe Rails is already stopped?"
-                    exit 99
-                fi
-
-                PID=$(cat $PIDFILE)
-
-                if [ -e "$PIDFILE" ] && (pgrep -u {appinfo["osuser_name"]} | grep -x -f $PIDFILE &> /dev/null); then
-                  kill $PID
-                  sleep 3
-                fi
-
-                if [ -e "$PIDFILE" ] && (pgrep -u {appinfo["osuser_name"]} | grep -x -f $PIDFILE &> /dev/null); then
-                  echo "Rails did not stop, killing it."
-                  sleep 3
-                  kill -9 $PID
-                fi
-                rm -f $PIDFILE
-                echo "Stopped."
+                export PATH=/opt/rh/rh-ruby30/root/usr/local/bin:/opt/rh/rh-ruby30/root/usr/bin:/opt/bin:$PROJECTDIR/bin:$HOME/apps/$APPNAME/env/bin:$PATH
+                export GEM_PATH=/opt/rh/rh-ruby30/root/usr/share/gems/:$HOME/apps/$APPNAME/env/gems
+                export LD_LIBRARY_PATH=/opt/rh/rh-ruby30/root/usr/local/lib64:/opt/rh/rh-ruby30/root/usr/lib64:/opt/lib
+                export GEM_HOME=$HOME/apps/$APPNAME/env
+                export RAILS_ENV=$RAILS_ENV
                 ''')
-    create_file(f'{appdir}/stop', stop_script, perms=0o700)
+    create_file(f'{appdir}/setenv', setenv, perms=0o600)
+
 
     # cron
     m = random.randint(0,9)
     croncmd = f'0{m},1{m},2{m},3{m},4{m},5{m} * * * * {appdir}/start > /dev/null 2>&1'
-    cronjob = add_cronjob(croncmd)
+    cronjob = add_cronjob(croncmd, CMD_ENV)
 
     # make README
     readme = textwrap.dedent(f'''\
@@ -247,47 +389,75 @@ def main():
                         config.hosts << "domain.com"
                         config.hosts << "www.domain.com"
 
-                3. Run the following commands to restart your Rails instance:
+                3. Edit {appdir}/nginx/nginx.conf to set server_name to include your
+                   site's domains. Example:
 
-                        {appdir}/stop
-                        {appdir}/start
+                        server_name domain.com www.domain.com;
+
+                4. Run the following command to restart your Rails instance:
+
+                        {appdir}/restart
 
                 ## Using your own project
 
                 If you want to serve your own Rails project from this instance:
 
-                1. Upload your project directory to: {appdir}
+                1. Upload your project directory to {appdir}.
 
                 2. SSH to your app's shell user account.
 
-                3. Set your GEM_HOME and PATH environment to your application and then install
-                   your project dependencies with bundle:
+                3. Edit {appdir}/setenv to set PROJECTDIR to your project directory, eg:
 
-                        export GEM_HOME={appdir}/env
-                        export PATH={appdir}/env/bin:{appdir}/yourproject/bin:$PATH
+                        PROJECTDIR=$HOME/app/$APPNAME/yourproject
+
+                3. Set your environment for your application:
+
+                        cd {appdir}
+                        source setenv
+
+                4. Install your project dependencies with bundle:
+
                         cd {appdir}/yourproject
                         bundle install
 
-                4. Edit {appdir}/start and {appdir}/stop
+                5. Edit {appdir}/start_puma and {appdir}/stop_puma
                    to change the PROJECTDIR variable on line 4 to point to your
-                   project directory.
+                   project directory, for example:
 
-                5. Run the following commands to restart your Rails instance:
+                        PROJECTDIR=$HOME/apps/$APPNAME/yourproject
+
+                6. Edit {appdir}/nginx.conf to change the Puma socket path and server root to point to your project directory, for example:
+
+                        ...
+                        upstream puma {{
+                          server unix:/home/shell_user_name/apps/app_name/yourproject/tmp/sockets/puma.sock fail_timeout=0;
+                        }}
+
+
+                        server {{
+                            # change the next two lines to use your site domain
+                            # and your project's public directory
+                            server_name localhost;
+                            root /home/shell_user_name/apps/app_name/yourproject;
+                        ...
+
+
+                7. Run the following commands to restart your Rails instance:
 
                         mkdir -p {appdir}/yourproject/tmp/pids
+                        mkdir -p {appdir}/yourproject/tmp/sockets
                         cp {appdir}/oldproject/tmp/pids/* {appdir}/yourproject/tmp/pids/
-                        {appdir}/stop
-                        {appdir}/start
+                        {appdir}/restart
 
                 For more information please refer to our Ruby on Rails topic guide at:
 
-                https://help.opalstack.com/section/112/ruby-on-rails
+                https://docs.opalstack.com/topic-guides/rails/
                 ''')
     create_file(f'{appdir}/README', readme)
 
     # start it
     cmd = f'{appdir}/start'
-    startit = run_command(cmd)
+    startit = run_command(cmd, CMD_ENV)
 
     # finished, push a notice
     msg = f'See README in app directory for more info.'
@@ -299,3 +469,5 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+
