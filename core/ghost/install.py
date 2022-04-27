@@ -164,8 +164,6 @@ def main():
     doit = run_command(cmd, cwd=appdir)
     cmd = f'npm install ghost-cli@latest'
     doit = run_command(cmd, cwd=appdir)
-    cmd = f'''sed -i -e 's/mode.others.read/mode.owner.read/' {appdir}/node_modules/ghost-cli/lib/commands/doctor/checks/check-directory.js'''
-    doit = run_command(cmd, cwd=appdir)
 
     # install ghost instance
     cmd = f'mkdir {appdir}/ghost'
