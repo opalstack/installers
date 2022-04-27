@@ -173,6 +173,12 @@ def main():
     cmd = f'{appdir}/node_modules/.bin/ghost install local --port {appinfo["port"]} --log file'
     doit = run_command(cmd, cwd=f'{appdir}/ghost')
 
+    # fix sqlite stuff (FIXME later)
+    cmd = f'rm -r {appdir}/ghost/current/node_modules/sqlite3'
+    doit = run_command(cmd, cwd=appdir)
+    cmd = f'cp -r {appdir}/node_modules/@vscode/sqlite3 {appdir}/ghost/current/node_modules/'
+    doit = run_command(cmd, cwd=appdir)
+
     # update ghost config to put logs in log dir
     cmd = f'{appdir}/node_modules/.bin/ghost config set logging[\'path\'] \'/home/{appinfo["osuser_name"]}/logs/apps/{appinfo["name"]}/\''
     doit = run_command(cmd, cwd=f'{appdir}/ghost')
@@ -230,6 +236,7 @@ def main():
 
                 ## Controlling your app
 
+                B
                 Start your app by running:
 
                     {appdir}/start
