@@ -187,7 +187,7 @@ def main():
     start_script = textwrap.dedent(f'''\
                 #!/bin/bash
                 PATH={appdir}/node/bin:$PATH
-                {appdir}/node_modules/.bin/ghost start -d {appdir}/ghost
+                {appdir}/node_modules/.bin/ghost start -d {appdir}/ghost --no-setup-linux-user
                 echo "Started Ghost for {appinfo["name"]}."
                 ''')
     create_file(f'{appdir}/start', start_script, perms=0o700)
@@ -196,7 +196,7 @@ def main():
     stop_script = textwrap.dedent(f'''\
                 #!/bin/bash
                 PATH={appdir}/node/bin:$PATH
-                {appdir}/node_modules/.bin/ghost stop -d {appdir}/ghost
+                {appdir}/node_modules/.bin/ghost stop -d {appdir}/ghost --no-setup-linux-user
                 echo "Stopped Ghost for {appinfo["name"]}."
                 ''')
     create_file(f'{appdir}/stop', stop_script, perms=0o700)
