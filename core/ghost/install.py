@@ -162,7 +162,7 @@ def main():
     # TODO: remove sleep after race is figured out
     cmd = f'sleep 10'
     doit = run_command(cmd, cwd=appdir)
-    cmd = f'npm install ghost-cli@latest'
+    cmd = f'npm install --prefix={appdir} ghost-cli@latest'
     doit = run_command(cmd, cwd=appdir)
 
     # install ghost instance
