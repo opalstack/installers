@@ -162,6 +162,8 @@ def main():
     # TODO: remove sleep after race is figured out
     cmd = f'sleep 10'
     doit = run_command(cmd, cwd=appdir)
+    cmd = f'npm install --prefix={appdir} @vscode/sqlite3'
+    doit = run_command(cmd, cwd=appdir)
     cmd = f'npm install --prefix={appdir} ghost-cli@latest'
     doit = run_command(cmd, cwd=appdir)
 
