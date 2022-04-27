@@ -170,7 +170,7 @@ def main():
     # install ghost instance
     cmd = f'mkdir {appdir}/ghost'
     doit = run_command(cmd)
-    cmd = f'{appdir}/node_modules/.bin/ghost install local --port {appinfo["port"]} --log file'
+    cmd = f'{appdir}/node_modules/.bin/ghost install local --port {appinfo["port"]} --log file --no-start'
     doit = run_command(cmd, cwd=f'{appdir}/ghost')
 
     # fix sqlite stuff (FIXME later)
