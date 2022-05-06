@@ -168,6 +168,7 @@ else
     /bin/wget https://download.nextcloud.com/server/releases/latest.tar.bz2 -O $HOME/apps/$APPNAME/latest.tar.bz2
     /bin/tar -xf $HOME/apps/$APPNAME/latest.tar.bz2 nextcloud -C $HOME/apps/$APPNAME/ --strip-components=1
     /bin/rm $HOME/apps/$APPNAME/latest.tar.bz2
+    /bin/rm $HOME/apps/$APPNAME/index.html    
 
     # generate password
     app_pass=`date +%s | sha256sum | base64 | head -c 20`
