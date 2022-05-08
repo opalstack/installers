@@ -177,6 +177,9 @@ else
     # install with occ
     /bin/php74 $HOME/apps/$APPNAME/occ maintenance:install --database pgsql --database-name $DBNAME --database-user $DBUSER --database-pass $DBPWD --admin-user $USER --admin-pass $app_pass --admin-email $accountemail --data-dir $HOME/apps/$APPNAME/data
 
+    # set crontab
+    (crontab -l ; echo "*/5  *  *  *  * /bin/php74 $HOME/apps/$APPNAME/cron.php")| crontab -
+
     # Send JSON installed OK.
     /usr/bin/curl -s -X POST --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN" -d'[{"id": "'$UUID'"}]' $API_URL/api/v1/app/installed/
 
