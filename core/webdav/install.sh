@@ -46,7 +46,7 @@ else
     /usr/bin/touch /home/$USER/apps/$APPNAME/passwd
     PASSWORD=$(date +%s | sha256sum | base64 | head -c 16 ; echo)
     DIGEST="$( /bin/printf "%s:%s:%s" "$USER" "$APPNAME" "$PASSWORD" | /bin/md5sum | awk '{print $1}' )"
-    /bin/setfacl -m u:apache:rwx /home/$USER/logs/apps/$APPNAME/$UUID
+    /bin/setfacl -m u:apache:rwx /home/$USER/logs/apps/$APPNAME/
     /bin/setfacl -m u:apache:rwx /home/$USER/logs/apps/$APPNAME/
     /bin/setfacl -m u:apache:r-- /home/$USER/logs/apps/$APPNAME/passwd
     /bin/printf "%s:%s:%s\n" "$USER" "$APPNAME" "$DIGEST" >> "/home/$USER/apps/$APPNAME/passwd"
