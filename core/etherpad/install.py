@@ -155,7 +155,7 @@ def main():
     run_command(f'/bin/wget {ETHERPAD_URL} -O {appdir}/1.8.18.zip')
     run_command(f'/bin/unzip {appdir}/1.8.18.zip -d {appdir}/')
     run_command(f'/bin/rm {appdir}/1.8.18.zip')
-    run_command(f'{appdir}/etherpad-lite-1.8.18/bin/run.sh')
+    #run_command(f'{appdir}/etherpad-lite-1.8.18/bin/run.sh')
 
     # finished, push a notice
     msg = f'See README in app directory for more info.'
