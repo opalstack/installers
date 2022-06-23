@@ -13,7 +13,6 @@ import subprocess
 import shlex
 import random
 from urllib.parse import urlparse
-import json 
 
 API_HOST = os.environ.get('API_URL').strip('https://').strip('http://')
 API_BASE_URI = '/api/v1'
@@ -258,21 +257,30 @@ def main():
 
     # start script
     start_script = textwrap.dedent(f'''\
-                #!/bin/bash
+                #!/bin/sh
+
                 export TMPDIR={appdir}/tmp
                 mkdir -p {appdir}/tmp
                 PIDFILE="{appdir}/tmp/node.pid"
-                NODE={appdir}/node/bin/node
 
-                if [ -e "$PIDFILE" ] && (pgrep -u {appinfo["osuser_name"]} | grep -x -f $PIDFILE &> /dev/null); then
-                  echo "Etherpad already running."
-                  exit 99
+                if [ -e "$PIDFILE" ] && (pgrep -u nextcloud | grep -x -f $PIDFILE &> /dev/null); then
+                echo "Etherpad already running."
+                exit 99
                 fi
 
-                cd {appdir}
-                /usr/sbin/daemonize -c {appdir} -e ~/logs/apps/{appinfo["name"]}/node_error.log -o ~/logs/apps/{appinfo["name"]}/node_output.log -p $PIDFILE {appdir}/etherpad-lite-1.8.18/bin/run.sh
+                # Move to the Etherpad base directory.
+                cd etherpad-lite-1.8.18 || exit 1
 
-                echo "Etherpad Started"
+                # Source constants and useful functions
+                . src/bin/functions.sh
+
+                # Prepare the environment
+                src/bin/installDeps.sh || exit 1
+
+                # Move to the node folder and start
+                log "Starting Etherpad..."
+
+                /usr/sbin/daemonize -c {appdir} -e ~/logs/apps/{appinfo["name"]}/node_error.log -o ~/logs/apps/{appinfo["name"]}/node_output.log -p $PIDFILE {appdir}/node/bin/node src/node/server.js
                 ''')
     create_file(f'{appdir}/start', start_script, perms=0o700)
 
