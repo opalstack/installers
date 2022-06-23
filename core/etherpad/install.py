@@ -13,6 +13,7 @@ import subprocess
 import shlex
 import random
 from urllib.parse import urlparse
+import json 
 
 API_HOST = os.environ.get('API_URL').strip('https://').strip('http://')
 API_BASE_URI = '/api/v1'
@@ -253,7 +254,7 @@ def main():
         "enableAdminUITests": False
         }
 
-    create_file(f'{appdir}/etherpad-lite-1.8.18/settings.json', settings)
+    create_file(f'{appdir}/etherpad-lite-1.8.18/settings.json', json.dumps(settings))
 
     # start script
     start_script = textwrap.dedent(f'''\
