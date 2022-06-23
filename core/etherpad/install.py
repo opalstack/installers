@@ -143,6 +143,7 @@ def main():
     api = OpalstackAPITool(API_HOST, API_BASE_URI, args.opal_token, args.opal_user, args.opal_password)
     appinfo = api.get(f'/app/read/{args.app_uuid}')
     appdir = f'/home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}'
+    port = appinfo["port"]
 
     # get current LTS nodejs
     cmd = f'mkdir -p {appdir}/node'
@@ -155,14 +156,160 @@ def main():
     run_command(f'/bin/wget {ETHERPAD_URL} -O {appdir}/1.8.18.zip')
     run_command(f'/bin/unzip {appdir}/1.8.18.zip -d {appdir}/')
     run_command(f'/bin/rm {appdir}/1.8.18.zip')
-    #run_command(f'{appdir}/etherpad-lite-1.8.18/bin/run.sh')
+    settings =  {
+        "title": "Etherpad",
+        "favicon": None,
+        "skinName": "colibris",
+        "skinVariants": "super-light-toolbar super-light-editor light-background",
+        "ip": "0.0.0.0",
+        "port": port,
+        "showSettingsInAdminPage": True,
+        "dbType": "dirty",
+        "dbSettings": {
+            "filename": "var/dirty.db"
+        },
+        "defaultPadText" : "Welcome to Etherpad!",
+        "padOptions": {
+            "noColors":         False,
+            "showControls":     True,
+            "showChat":         True,
+            "showLineNumbers":  True,
+            "useMonospaceFont": False,
+            "userName":         False,
+            "userColor":        False,
+            "rtl":              False,
+            "alwaysShowChat":   False,
+            "chatAndUsers":     False,
+            "lang":             "en-gb"
+        },
+        "padShortcutEnabled" : {
+            "altF9":     True, 
+            "altC":      True, 
+            "cmdShift2": True, 
+            "delete":    True,
+            "return":    True,
+            "esc":       True, 
+            "cmdS":      True, 
+            "tab":       True, 
+            "cmdZ":      True, 
+            "cmdY":      True, 
+            "cmdI":      True, 
+            "cmdB":      True, 
+            "cmdU":      True, 
+            "cmd5":      True, 
+            "cmdShiftL": True, 
+            "cmdShiftN": True, 
+            "cmdShift1": True, 
+            "cmdShiftC": True, 
+            "cmdH":      True, 
+            "ctrlHome":  True, 
+            "pageUp":    True,
+            "pageDown":  True
+        },
+        "suppressErrorsInPadText": False,
+        "requireSession": False,
+        "editOnly": False,
+        "minify": True,
+        "maxAge": 21600,
+        "abiword": None,
+        "soffice": None,
+        "tidyHtml": None,
+        "allowUnknownFileEnds": True,
+        "requireAuthentication": False,
+        "requireAuthorization": False,
+        "trustProxy": True,
+        "cookie": {
+            "sameSite": "Lax"
+        },
+        "disableIPlogging": False,
+        "automaticReconnectionTimeout": 0,
+        "scrollWhenFocusLineIsOutOfViewport": {
+            "percentage": {
+            "editionAboveViewport": 0,
+            "editionBelowViewport": 0
+            },
+            "duration": 0,
+            "scrollWhenCaretIsInTheLastLineOfViewport": False,
+            "percentageToScrollWhenUserPressesArrowUp": 0
+        },
+        "socketTransportProtocols" : ["xhr-polling", "jsonp-polling", "htmlfile"],
+        "socketIo": {
+            "maxHttpBufferSize": 10000
+        },
+        "loadTest": False,
+        "dumpOnUncleanExit": False,
+        "importExportRateLimiting": {
+            "windowMs": 90000,
+            "max": 10
+        },
+        "importMaxFileSize": 52428800,
+        "commitRateLimiting": {
+            "duration": 1,
+            "points": 10
+        },
+        "exposeVersion": False,
+        "loglevel": "INFO",
+        "customLocaleStrings": {},
+        "enableAdminUITests": False
+        }
+
+    create_file(f'{appdir}/etherpad-lite-1.8.18/settings.json', settings)
+
+    # start script
+    start_script = textwrap.dedent(f'''\
+                #!/bin/bash
+                export TMPDIR={appdir}/tmp
+                mkdir -p {appdir}/tmp
+                PIDFILE="{appdir}/tmp/node.pid"
+                NODE={appdir}/node/bin/node
+
+                if [ -e "$PIDFILE" ] && (pgrep -u {appinfo["osuser_name"]} | grep -x -f $PIDFILE &> /dev/null); then
+                  echo "Etherpad already running."
+                  exit 99
+                fi
+
+                cd {appdir}
+                /usr/sbin/daemonize -c {appdir} -e ~/logs/apps/{appinfo["name"]}/node_error.log -o ~/logs/apps/{appinfo["name"]}/node_output.log -p $PIDFILE {appdir}/etherpad-lite-1.8.18/bin/run.sh
+
+                echo "Etherpad Started"
+                ''')
+    create_file(f'{appdir}/start', start_script, perms=0o700)
+
+    # stop script
+    stop_script = textwrap.dedent(f'''\
+                #!/bin/bash
+                PIDFILE="{appdir}/tmp/node.pid"
+
+                if [ ! -e "$PIDFILE" ]; then
+                    echo "$PIDFILE missing, maybe Etherpad is already stopped?"
+                    exit 99
+                fi
+
+                PID=$(cat $PIDFILE)
+
+                if [ -e "$PIDFILE" ] && (pgrep -u {appinfo["osuser_name"]} | grep -x -f $PIDFILE &> /dev/null); then
+                  kill $PID
+                  sleep 3
+                fi
+
+                if [ -e "$PIDFILE" ] && (pgrep -u {appinfo["osuser_name"]} | grep -x -f $PIDFILE &> /dev/null); then
+                  echo "Etherpad did not stop, killing it."
+                  sleep 3
+                  kill -9 $PID
+                fi
+                rm -f $PIDFILE
+                echo "Stopped."
+                ''')
+    create_file(f'{appdir}/stop', stop_script, perms=0o700)
+
+    run_command(f'{appdir}/start')
 
     # finished, push a notice
     msg = f'See README in app directory for more info.'
     payload = json.dumps([{'id': args.app_uuid}])
     finished=api.post('/app/installed/', payload)
 
-    logging.info(f'Completed installation of Node.js app {args.app_name}')
+    logging.info(f'Completed installation of Etherpad app {args.app_name}')
 
 if __name__ == '__main__':
     main()
