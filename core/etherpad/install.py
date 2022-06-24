@@ -139,7 +139,7 @@ def main():
     logging.basicConfig(level=logging.INFO,
                         format='[%(asctime)s] %(levelname)s: %(message)s')
     # go!
-    logging.info(f'Started installation of Node.js app {args.app_name}')
+    logging.info(f'Started installation of Etherpad app {args.app_name}')
     api = OpalstackAPITool(API_HOST, API_BASE_URI, args.opal_token, args.opal_user, args.opal_password)
     appinfo = api.get(f'/app/read/{args.app_uuid}')
     appdir = f'/home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}'
@@ -152,6 +152,25 @@ def main():
     cmd = f'tar xf {appdir}/node.tar.xz --strip 1'
     doit = run_command(cmd, cwd=f'{appdir}/node')
     CMD_ENV['PATH'] = f'{appdir}/node/bin:{CMD_ENV["PATH"]}'
+
+    # make README
+    readme = textwrap.dedent(f'''\
+                # Opalstack Etherpad README
+
+                ## Controlling your app
+
+                Start your app by running:
+
+                   {appdir}/start
+
+                Stop your app by running:
+
+                   {appdir}/stop
+
+                To use Etherpad with Nextcloud using the owncloud plugin you must add some mimetypes to nextcloud. 
+                See https://github.com/otetard/ownpad#mimetype-detection
+                ''')
+    create_file(f'{appdir}/README', readme)
 
     run_command(f'/bin/wget {ETHERPAD_URL} -O {appdir}/1.8.18.zip')
     run_command(f'/bin/unzip {appdir}/1.8.18.zip -d {appdir}/')
@@ -251,7 +270,7 @@ def main():
         "loglevel": "INFO",
         "customLocaleStrings": {},
         "enableAdminUITests": False
-        }
+    }
 
     create_file(f'{appdir}/etherpad-lite-1.8.18/settings.json', json.dumps(settings))
 
