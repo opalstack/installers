@@ -13,6 +13,7 @@ import subprocess
 import shlex
 import random
 from urllib.parse import urlparse
+import secrets
 
 API_HOST = os.environ.get('API_URL').strip('https://').strip('http://')
 API_BASE_URI = '/api/v1'
@@ -145,6 +146,13 @@ def main():
     appdir = f'/home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}'
     port = appinfo["port"]
 
+    dbname = f'etherpad_{secrets.token_hex(4)}'
+
+    # create database user
+    mariauser = api.post(f'/api/v1/mariauser/create/', [{"name": dbname, "server": appinfo["server"] }])[0]
+    # create database
+    mariadb = api.post(f'/api/v1/mariadb/create/', [{ "name": dbname, "server": appinfo["server"], "dbusers_readwrite": [mariauser["id"]] }])[0]
+ 
     # get current LTS nodejs
     cmd = f'mkdir -p {appdir}/node'
     doit = run_command(cmd)
@@ -153,6 +161,11 @@ def main():
     doit = run_command(cmd, cwd=f'{appdir}/node')
     CMD_ENV['PATH'] = f'{appdir}/node/bin:{CMD_ENV["PATH"]}'
 
+    # cron
+    m = random.randint(0,9)
+    croncmd = f'0{m},1{m},2{m},3{m},4{m},5{m} * * * * {appdir}/start > /dev/null 2>&1'
+    cronjob = add_cronjob(croncmd)
+    
     # make README
     readme = textwrap.dedent(f'''\
                 # Opalstack Etherpad README
@@ -175,6 +188,8 @@ def main():
     run_command(f'/bin/wget {ETHERPAD_URL} -O {appdir}/1.8.18.zip')
     run_command(f'/bin/unzip {appdir}/1.8.18.zip -d {appdir}/')
     run_command(f'/bin/rm {appdir}/1.8.18.zip')
+
+    pw = secrets.token_hex(8)
     settings =  {
         "title": "Etherpad",
         "favicon": None,
@@ -183,9 +198,14 @@ def main():
         "ip": "0.0.0.0",
         "port": port,
         "showSettingsInAdminPage": True,
-        "dbType": "dirty",
-        "dbSettings": {
-            "filename": "var/dirty.db"
+        "dbType" : "mysql",
+        "dbSettings" : {
+            "user":     dbname,
+            "host":     "localhost",
+            "port":     3306,
+            "password": mariauser["password"],
+            "database": dbname,
+            "charset":  "utf8mb4"
         },
         "defaultPadText" : "Welcome to Etherpad!",
         "padOptions": {
@@ -226,7 +246,7 @@ def main():
             "pageDown":  True
         },
         "suppressErrorsInPadText": False,
-        "requireSession": False,
+        "requireSession": True,
         "editOnly": False,
         "minify": True,
         "maxAge": 21600,
@@ -234,8 +254,8 @@ def main():
         "soffice": None,
         "tidyHtml": None,
         "allowUnknownFileEnds": True,
-        "requireAuthentication": False,
-        "requireAuthorization": False,
+        "requireAuthentication": True,
+        "requireAuthorization": True,
         "trustProxy": True,
         "cookie": {
             "sameSite": "Lax"
@@ -270,6 +290,13 @@ def main():
         "loglevel": "INFO",
         "customLocaleStrings": {},
         "enableAdminUITests": False
+        "users": {
+            appinfo["osuser_name"]: {
+            "password": pw,
+            "is_admin": True
+            },
+        },
+
     }
 
     create_file(f'{appdir}/etherpad-lite-1.8.18/settings.json', json.dumps(settings))
@@ -282,7 +309,7 @@ def main():
                 mkdir -p {appdir}/tmp
                 PIDFILE="{appdir}/tmp/node.pid"
 
-                if [ -e "$PIDFILE" ] && (pgrep -u nextcloud | grep -x -f $PIDFILE &> /dev/null); then
+                if [ -e "$PIDFILE" ] && (pgrep -u {appinfo["osuser_name"]} | grep -x -f $PIDFILE &> /dev/null); then
                 echo "Etherpad already running."
                 exit 99
                 fi
@@ -333,10 +360,10 @@ def main():
     run_command(f'{appdir}/start')
 
     # finished, push a notice
-    msg = f'See README in app directory for more info.'
+    msg = f'Initial user is {appinfo["osuser_name"]}, password: {pw} - see README in app directory.'
     payload = json.dumps([{'id': args.app_uuid}])
     finished=api.post('/app/installed/', payload)
-
+    
     logging.info(f'Completed installation of Etherpad app {args.app_name}')
 
 if __name__ == '__main__':
