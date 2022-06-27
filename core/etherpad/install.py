@@ -150,10 +150,10 @@ def main():
 
     # create database user
     mupayload =  json.dumps([{"name": dbname, "server": appinfo["server"] }])
-    mariauser = api.post(f'/api/v1/mariauser/create/', mupayload)[0]
+    mariauser = api.post(f'/mariauser/create/', mupayload)[0]
     # create database
     mdbpayload = json.dumps([{ "name": dbname, "server": appinfo["server"], "dbusers_readwrite": [mariauser["id"]] }])
-    mariadb = api.post(f'/api/v1/mariadb/create/', mdbpayload)[0]
+    mariadb = api.post(f'/mariadb/create/', mdbpayload)[0]
  
     # get current LTS nodejs
     cmd = f'mkdir -p {appdir}/node'
