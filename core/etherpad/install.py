@@ -149,9 +149,11 @@ def main():
     dbname = f'etherpad_{secrets.token_hex(4)}'
 
     # create database user
-    mariauser = api.post(f'/api/v1/mariauser/create/', [{"name": dbname, "server": appinfo["server"] }])[0]
+    mupayload =  json.dumps([{"name": dbname, "server": appinfo["server"] }])
+    mariauser = api.post(f'/api/v1/mariauser/create/', mupayload)[0]
     # create database
-    mariadb = api.post(f'/api/v1/mariadb/create/', [{ "name": dbname, "server": appinfo["server"], "dbusers_readwrite": [mariauser["id"]] }])[0]
+    mdbpayload = json.dumps([{ "name": dbname, "server": appinfo["server"], "dbusers_readwrite": [mariauser["id"]] }])
+    mariadb = api.post(f'/api/v1/mariadb/create/', mdbpayload)[0]
  
     # get current LTS nodejs
     cmd = f'mkdir -p {appdir}/node'
