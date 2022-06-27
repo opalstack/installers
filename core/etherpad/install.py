@@ -152,7 +152,7 @@ def main():
     mupayload =  json.dumps([{"name": dbname, "server": appinfo["server"] }])
     mariauser = api.post(f'/mariauser/create/', mupayload)[0]
     # create database
-    mdbpayload = json.dumps([{ "name": dbname, "server": appinfo["server"], "dbusers_readwrite": [mariauser["id"]] }])
+    mdbpayload = json.dumps([{ "name": dbname, "server": appinfo["server"], "charset":"utf8mb4", "dbusers_readwrite": [mariauser["id"]] }])
     mariadb = api.post(f'/mariadb/create/', mdbpayload)[0]
  
     # get current LTS nodejs
