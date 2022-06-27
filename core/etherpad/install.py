@@ -205,7 +205,7 @@ def main():
             "user":     dbname,
             "host":     "localhost",
             "port":     3306,
-            "password": mariauser["password"],
+            "password": mariauser["default_password"],
             "database": dbname,
             "charset":  "utf8mb4"
         },
