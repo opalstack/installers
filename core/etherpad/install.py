@@ -165,7 +165,7 @@ def main():
     m = random.randint(0,9)
     croncmd = f'0{m},1{m},2{m},3{m},4{m},5{m} * * * * {appdir}/start > /dev/null 2>&1'
     cronjob = add_cronjob(croncmd)
-    
+
     # make README
     readme = textwrap.dedent(f'''\
                 # Opalstack Etherpad README
@@ -289,7 +289,7 @@ def main():
         "exposeVersion": False,
         "loglevel": "INFO",
         "customLocaleStrings": {},
-        "enableAdminUITests": False
+        "enableAdminUITests": False,
         "users": {
             appinfo["osuser_name"]: {
             "password": pw,
