@@ -44,21 +44,19 @@ else
          echo 'UUID validation and server lookup failed.'
          exit 1
     fi;
+    B
 fi;
 echo $PORT
 
 mkdir -p $HOME/apps/$APPNAME/tmp
 
-# installs a newer version of pip into .local/bin
-/usr/bin/pip3.6 install --user --upgrade --force-reinstall pip
-# Uses the upgraded pip to install/upgrade virtualenv
-/home/$USER/.local/bin/pip3.6 install --user --force-reinstall virtualenv
-
-/home/$USER/.local/bin/virtualenv /home/$USER/apps/$APPNAME/env
+# create a python 3.10 venv
+/usr/local/bin/python3.10 -m venv /home/$USER/apps/$APPNAME/env
 source /home/$USER/apps/$APPNAME/env/bin/activate
+pip install -U pip
 
 # install latest LTS release
-pip3.6 install https://projects.unbit.it/downloads/uwsgi-lts.tar.gz
+pip install https://projects.unbit.it/downloads/uwsgi-lts.tar.gz
 chmod +x /home/$USER/apps/$APPNAME/env/bin/uwsgi
 
 export PORT
@@ -103,7 +101,7 @@ LVR5cGUnLCd0ZXh0L2h0bWwnKV0pCiAgICByZXR1cm4gW2InSGVsbG8gV29ybGQhJ10KJycnCm9z
 Lm1rZGlyKGYnL2hvbWUve3VzZXJ9L2FwcHMve25hbWV9L215YXBwJywgbW9kZT0wbzcwMCkKZiA9
 IG9wZW4obXlhcHBfd3NnaV9wYXRoLCAndysnKQpmLndyaXRlKG15YXBwX3dzZ2kpCmYuY2xvc2UK
 cHJpbnQoZidXcm90ZSB7bXlhcHBfd3NnaV9wYXRofScpCg==" | base64 --decode > /home/$USER/apps/$APPNAME/tmp/$APPNAME-generator.py
-/usr/bin/python3.6 /home/$USER/apps/$APPNAME/tmp/$APPNAME-generator.py
+/usr/local/bin/python3.10 /home/$USER/apps/$APPNAME/tmp/$APPNAME-generator.py
 rm -f /home/$USER/apps/$APPNAME/tmp/$APPNAME-generator.py
 
 chmod +x /home/$USER/apps/$APPNAME/start

@@ -153,14 +153,8 @@ def main():
     logging.info(f'Created directory {appdir}/tmp')
     CMD_ENV['TMPDIR'] = f'{appdir}/tmp'
 
-    # install python and deps
-    download(BUILDPY_URL, f'{appdir}/build_python.sh', perms=0o700)
-    cmd = f'{appdir}/build_python.sh {appdir}/python'
-    doit = run_command(cmd)
-    logging.info(f'Installed Python at {appdir}/python')
-
     # create virtualenv
-    cmd = f'{appdir}/python/bin/python3 -m venv {appdir}/env'
+    cmd = f'/usr/local/bin/python3.10 -m venv {appdir}/env'
     doit = run_command(cmd)
     logging.info(f'Created virtualenv at {appdir}/env')
 
@@ -187,9 +181,6 @@ def main():
     # django config
     # set ALLOWED_HOSTS
     cmd = f'''sed -r -i "s/^ALLOWED_HOSTS = \[\]/ALLOWED_HOSTS = \['\*'\]/" {appdir}/myproject/myproject/settings.py'''
-    doit = run_command(cmd)
-    # comment out DATABASES
-    cmd = f'''sed -r -i "/^DATABASES =/, /^}}$/ s/^/#/" {appdir}/myproject/myproject/settings.py'''
     doit = run_command(cmd)
     logging.info(f'Wrote initial Django config to {appdir}/myproject/myproject/settings.py')
 
