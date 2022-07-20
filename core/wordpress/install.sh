@@ -64,7 +64,9 @@ else
 
 
     # create database
-    dbusend='[{"name": "'"$APPNAME"'", "server": "'"$serverid"'" }]'
+    # unique DB name
+    APPDB="${APPNAME:0:8}_${UUID:0:8}"
+    dbusend='[{"name": "'"$APPDB"'", "server": "'"$serverid"'" }]'
     # create database user
     if dbjson=`curl -s --fail --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN" -d"$dbusend"  $API_URL/api/v1/mariauser/create/` ;then
          export $(echo $dbjson| jq -r '@sh "DBUSERID=\(.[0].id) DBUSER=\(.[0].name) DBPWD=\(.[0].default_password)"' )
@@ -83,7 +85,7 @@ else
     echo $DBUSER
     echo $DBUSERID
 
-    dbsend='[{ "name": '\"$APPNAME\"', "server": '\"$serverid\"', "dbusers_readwrite": ['\"$DBUSERID\"'] }]'
+    dbsend='[{ "name": '\"$APPDB\"', "server": '\"$serverid\"', "dbusers_readwrite": ['\"$DBUSERID\"'] }]'
     echo $dbsend
     if dbjson=`curl -s --fail --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN" -d"$dbsend"  $API_URL/api/v1/mariadb/create/` ;then
          export $(echo $dbjson| jq -r '@sh "DBNAME=\(.[0].name) DBID=\(.[0].id) "' )
