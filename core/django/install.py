@@ -189,6 +189,7 @@ def main():
                 [uwsgi]
                 master = True
                 http-socket = 127.0.0.1:{appinfo["port"]}
+                env = LD_LIBRARY_PATH=/usr/sqlite330/lib
                 virtualenv = {appdir}/env/
                 daemonize = /home/{appinfo["osuser_name"]}/logs/apps/{appinfo["name"]}/uwsgi.log
                 pidfile = {appdir}/tmp/uwsgi.pid
@@ -206,6 +207,7 @@ def main():
     start_script = textwrap.dedent(f'''\
                 #!/bin/bash
                 export TMPDIR={appdir}/tmp
+                export LD_LIBRARY_PATH=/usr/sqlite330/lib
                 mkdir -p {appdir}/tmp
                 PIDFILE="{appdir}/tmp/uwsgi.pid"
 
@@ -291,6 +293,10 @@ def main():
 
                    {appdir}/stop
                    {appdir}/start
+
+                ## More info
+
+                See https://docs.opalstack.com/topic-guides/django/ for more information.
                 ''')
     create_file(f'{appdir}/README', readme)
 
