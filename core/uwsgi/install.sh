@@ -1,6 +1,10 @@
 #! /bin/bash
 # Opalstack uwsgi installer.
 
+# env for sqlite3
+export PATH=/usr/sqlite330/bin:$PATH
+export LD_LIBRARY_PATH=/usr/sqlite330/lib
+
 CRED2='\033[1;91m'        # Red
 CGREEN2='\033[1;92m'      # Green
 CYELLOW2='\033[1;93m'     # Yellow
