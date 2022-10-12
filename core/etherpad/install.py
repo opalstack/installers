@@ -328,7 +328,7 @@ def main():
                 # Move to the node folder and start
                 log "Starting Etherpad..."
 
-                /usr/sbin/daemonize -c {appdir} -e ~/logs/apps/{appinfo["name"]}/node_error.log -o ~/logs/apps/{appinfo["name"]}/node_output.log -p $PIDFILE {appdir}/node/bin/node {appdir}/etherpad-lite-1.8.18/src/node/server.js
+                /usr/sbin/daemonize -c {appdir} -a -e ~/logs/apps/{appinfo["name"]}/node_error.log -o ~/logs/apps/{appinfo["name"]}/node_output.log -p $PIDFILE {appdir}/node/bin/node {appdir}/etherpad-lite-1.8.18/src/node/server.js
                 ''')
     create_file(f'{appdir}/start', start_script, perms=0o700)
 

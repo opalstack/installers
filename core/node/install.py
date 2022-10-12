@@ -191,7 +191,7 @@ def main():
                 fi
 
                 cd {appdir}
-                /usr/sbin/daemonize -c {appdir} -e ~/logs/apps/{appinfo["name"]}/node_error.log -o ~/logs/apps/{appinfo["name"]}/node_output.log -p $PIDFILE $NODE app.js
+                /usr/sbin/daemonize -c {appdir} -a -e ~/logs/apps/{appinfo["name"]}/node_error.log -o ~/logs/apps/{appinfo["name"]}/node_output.log -p $PIDFILE $NODE app.js
 
                 echo "Started Node.js for {appinfo["name"]}."
                 ''')
