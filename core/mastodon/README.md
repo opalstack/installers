@@ -20,7 +20,7 @@ Please take the following steps before you begin to use your Mastodon instance:
 
 9. Run the following command to restart your app:
 
-        {appdir}/restart
+        ~/apps/name_of_app/restart
 
 10. Create a Mastodon admin user as follows, replacing "username" and "username@example.com" with your own choices:
 

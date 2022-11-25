@@ -458,11 +458,6 @@ def main():
     # supervisord config
     supervisord_conf = textwrap.dedent(
         f"""\
-
-
-
-
-
                 [unix_http_server]
                 file=/home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}/mastodon/tmp/sockets/supervisor.sock
 
@@ -588,7 +583,7 @@ def main():
                 RAILS_ENV=production
 
                 # no need to edit below this line
-                export PATH=/opt/rh/rh-redis5/root/usr/bin:/opt/rh/rh-redis5/root/usr/sbin:/opt/rh/rh-ruby30/root/usr/local/bin:/opt/rh/rh-ruby30/root/usr/bin:/home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}/mastodon/bin:/usr/local/bin:/bin:/usr/bin:/usr/local/sbin:/usr/sbin:/opt/puppetlabs/bin:/home/{appinfo["osuser_name"]}/.local/bin:/home/{appinfo["osuser_name"]}/bin:$PATH
+                export PATH=/opt/rh/rh-redis5/root/usr/bin:/opt/rh/rh-redis5/root/usr/sbin:/opt/rh/rh-ruby30/root/usr/local/bin:/opt/rh/rh-ruby30/root/usr/bin:/home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}/mastodon/bin:/usr/local/bin:/bin:/usr/bin:/usr/local/sbin:/usr/sbin:/opt/puppetlabs/bin:/usr/pgsql-11/bin/:/home/{appinfo["osuser_name"]}/.local/bin:/home/{appinfo["osuser_name"]}/bin:$PATH
                 export LD_LIBRARY_PATH=/opt/rh/rh-redis5/root/usr/lib64:/opt/rh/rh-ruby30/root/usr/local/lib64:/opt/rh/rh-ruby30/root/usr/lib64
                 export GEM_PATH=/opt/rh/rh-ruby30/root/usr/share/gems/:$HOME/apps/$APPNAME/mastodon/vendor/bundle/ruby/3.0.0/gems
                 export GEM_HOME=$HOME/apps/$APPNAME/mastodon/
