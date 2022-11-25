@@ -11,7 +11,7 @@ Please take the following steps before you begin to use your Mastodon instance:
         cd ~/apps/name_of_app
         ./change_domain.py -o localhost -n mydomain.com
 
-3. Edit {appdir}/mastodon/.env.production to configure the site's email settings:
+3. Edit `~/apps/name_of_app//mastodon/.env.production` to configure the site's email settings:
 
         SMTP_SERVER=SMTP server
         SMTP_LOGIN=Mailbox name
@@ -22,7 +22,7 @@ Please take the following steps before you begin to use your Mastodon instance:
 
         ~/apps/name_of_app/restart
 
-10. Create a Mastodon admin user as follows, replacing "username" and "username@example.com" with your own choices:
+10. Create a Mastodon admin user as follows, replacing `username` and `username@example.com` with your own choices:
 
         cd ~/apps/name_of_app/mastodon
         source ../setenv
