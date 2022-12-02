@@ -208,7 +208,7 @@ def main():
                   exit 99
                 fi
 
-                {appdir}/env/bin/gunicorn -w 4 -k uvicorn.workers.UvicornWorker main:app -D -p $PIDFILE
+                {appdir}/env/bin/gunicorn -w 4 -k uvicorn.workers.UvicornWorker main:app -D -p $PIDFILE -b 127.0.0.1:{appinfo["port"]}
 
                 echo "Started Gunicorn for {appinfo["name"]}."
                 ''')
