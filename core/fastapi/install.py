@@ -208,7 +208,7 @@ def main():
                   exit 99
                 fi
 
-                {appdir}/env/bin/gunicorn -w 4 -k uvicorn.workers.UvicornWorker main:app -D -p $PIDFILE -b 127.0.0.1:{appinfo["port"]}
+                {appdir}/env/bin/gunicorn -w 4 -k uvicorn.workers.UvicornWorker main:app -D -p $PIDFILE -b 127.0.0.1:{appinfo["port"]} --access-logfile /home/{appinfo["osuser_name"]}/logs/apps/{appinfo["name"]}/access.log --error-logfile /home/{appinfo["osuser_name"]}/logs/apps/{appinfo["name"]}/error.log
 
                 echo "Started Gunicorn for {appinfo["name"]}."
                 ''')
@@ -227,9 +227,9 @@ def main():
                 PID=$(cat $PIDFILE)
 
                 if [ -e "$PIDFILE" ] && (pgrep -u {appinfo["osuser_name"]} | grep -x -f $PIDFILE &> /dev/null); then
-                  echo "Stopping Gunicorn."
+                  echo "Killing all Gunicorn processes on this account!"
                   sleep 3
-                  kill -9 $PID
+                  /bin/pkill gunicorn
                 fi
                 rm -f $PIDFILE
                 echo "Stopped."
