@@ -845,22 +845,22 @@ def main():
 
                         SMTP_SERVER=SMTP server
                         SMTP_LOGIN=Mailbox name
-                        SMTP_PASSWORD=Mailbox password
+                        SMTP_PASSWORD=Mailbox password (enclose in 'single quotes' if it contains any $ characters)
                         SMTP_FROM_ADDRESS=Email address
 
-                9. Run the following command to restart your app:
+                4. Run the following command to restart your app:
 
                         {appdir}/restart
 
-                10. Create a Mastodon admin user as follows, replacing "username" and "username@example.com" with your own choices:
+                5. Create a Mastodon admin user as follows, replacing "username" and "username@example.com" with your own choices:
 
                         cd {appdir}/mastodon
                         source ../setenv
                         RAILS_ENV=production bundle exec bin/tootctl accounts create username --email username@example.com --confirmed --role Owner
 
-                11. Visit the site you created in step 1 to log in.
+                6. Visit the site you created in step 1 to log in.
 
-                12. Follow the steps at https://docs.joinmastodon.org/admin/setup/ to complete the setup.
+                7. Follow the steps at https://docs.joinmastodon.org/admin/setup/ to complete the setup.
 
                 For further info please see: https://docs.joinmastodon.org/
                 """
