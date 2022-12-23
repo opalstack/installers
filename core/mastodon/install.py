@@ -292,6 +292,14 @@ def main():
     cmd = "yarn set version 1.22.19"
     doit = run_command(cmd, CMD_ENV, cwd=f"{appdir}/mastodon/")
 
+    # node overwrites some mastodon md files, let's roll those back
+    cmd = f"git checkout -- CHANGELOG.md"
+    doit = run_command(cmd, CMD_ENV, cwd=f"{appdir}/mastodon/")
+    cmd = f"git checkout -- README.md"
+    doit = run_command(cmd, CMD_ENV, cwd=f"{appdir}/mastodon/")
+    cmd = f"git checkout -- LICENSE"
+    doit = run_command(cmd, CMD_ENV, cwd=f"{appdir}/mastodon/")
+
     # install dependencies
     cmd = "bundle config deployment 'true'"
     doit = run_command(cmd, CMD_ENV, cwd=f"{appdir}/mastodon/")
