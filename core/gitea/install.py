@@ -16,7 +16,7 @@ from urllib.parse import urlparse
 
 API_HOST = os.environ.get('API_URL').strip('https://').strip('http://')
 API_BASE_URI = '/api/v1'
-GITEA_URL = 'https://installers.opalstack.opalstacked.com/gitea-1.14.2-linux-amd64'
+GITEA_URL = 'https://github.com/go-gitea/gitea/releases/download/v1.17.4/gitea-1.17.4-linux-amd64'
 CMD_ENV = {'PATH': '/usr/local/bin:/usr/bin:/bin','UMASK': '0002',}
 
 
@@ -180,6 +180,8 @@ def main():
             [security]
             INSTALL_LOCK   = true
 
+            [git]
+            PATH = /opt/rh/sclo-git212/root/usr/bin/git
             ''')
     create_file(f'{appdir}/custom/conf/app.ini', gitea_conf)
 
