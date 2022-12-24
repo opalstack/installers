@@ -178,7 +178,7 @@ def main():
             DISABLE_REGISTRATION = true
 
             [security]
-            INSTALL_LOCK   = true
+            INSTALL_LOCK = true
 
             [git]
             PATH = /opt/rh/sclo-git212/root/usr/bin/git
