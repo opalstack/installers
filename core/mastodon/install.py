@@ -544,10 +544,10 @@ def main():
 
                 if [ -e "$PIDFILE" ] && (pgrep -u {appinfo["osuser_name"]} | grep -x -f $PIDFILE &> /dev/null); then
                   echo "$APPNAME supervisord agent already running!"
-                  PYTHONPATH=/home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}/mastodon/bin/ /home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}/mastodon/bin/supervisorctl -c /home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}/supervisord.conf start all
+                  PYTHONPATH=$PROJECTDIR/bin/ $PROJECTDIR/bin/supervisorctl -c /home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}/supervisord.conf start all
                 else
                   echo "$APPNAME supervisord agent already not running, starting!"
-                  PYTHONPATH=/home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}/mastodon/bin/ /home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}/mastodon/bin/supervisord -c /home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}/supervisord.conf
+                  PYTHONPATH=$PROJECTDIR/bin/ $PROJECTDIR/bin/supervisord -c /home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}/supervisord.conf
                 fi
 
                 """
