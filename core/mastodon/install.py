@@ -539,6 +539,9 @@ def main():
                 # no need to edit below this line
                 PIDFILE="$PROJECTDIR/tmp/pids/supervisord.pid"
 
+                # clean up streaming socket if node isn't running
+                pgrep -f "node ./streaming" > /dev/null || (test -f $PROJECTDIR/tmp/sockets/streaming.sock &&  rm -f $PROJECTDIR/tmp/sockets/streaming.sock)
+
                 if [ -e "$PIDFILE" ] && (pgrep -u {appinfo["osuser_name"]} | grep -x -f $PIDFILE &> /dev/null); then
                   echo "$APPNAME supervisord agent already running!"
                   PYTHONPATH=/home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}/mastodon/bin/ /home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}/mastodon/bin/supervisorctl -c /home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}/supervisord.conf start all
