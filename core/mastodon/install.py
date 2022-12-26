@@ -368,6 +368,9 @@ def main():
                         root /home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}/mastodon/public;
 
                         listen {appinfo["port"]};
+                        keepalive_timeout 70;
+                        sendfile on;
+                        client_max_body_size 80m;
 
                         try_files $uri/index.html $uri @puma;
 
