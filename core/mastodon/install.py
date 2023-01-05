@@ -543,7 +543,7 @@ def main():
                 PIDFILE="$PROJECTDIR/tmp/pids/supervisord.pid"
 
                 # clean up streaming socket if node isn't running
-                pgrep -f "node ./streaming" > /dev/null || (test -f $PROJECTDIR/tmp/sockets/streaming.sock &&  rm -f $PROJECTDIR/tmp/sockets/streaming.sock)
+                pgrep -f "node ./streaming" > /dev/null || (test -s $PROJECTDIR/tmp/sockets/streaming.sock &&  rm -f $PROJECTDIR/tmp/sockets/streaming.sock)
 
                 if [ -e "$PIDFILE" ] && (pgrep -u {appinfo["osuser_name"]} | grep -x -f $PIDFILE &> /dev/null); then
                   echo "$APPNAME supervisord agent already running!"
