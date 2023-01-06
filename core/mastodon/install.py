@@ -514,7 +514,9 @@ def main():
                 directory=/home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}/mastodon
                 environment=
                     SOCKET="/home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}/mastodon/tmp/sockets/streaming.sock",
-                    REDIS_URL="unix:///home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}/mastodon/tmp/sockets/redis.sock"
+                    REDIS_URL="unix:///home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}/mastodon/tmp/sockets/redis.sock",
+                    NODE_ENV="production",
+                    STREAMING_CLUSTER_NUM="1"
                 command=node ./streaming
                 stdout_logfile=/home/{appinfo["osuser_name"]}/logs/apps/{appinfo["name"]}/streaming.log
                 stderr_logfile=/home/{appinfo["osuser_name"]}/logs/apps/{appinfo["name"]}/streaming.log
