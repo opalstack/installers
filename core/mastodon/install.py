@@ -24,7 +24,7 @@ CMD_ENV = {
     "UMASK": "0002",
 }
 LTS_NODE_URL = "https://nodejs.org/dist/v16.18.1/node-v16.18.1-linux-x64.tar.xz"
-MASTODON_VERSION = "4.0.2"
+MASTODON_VERSION = "4.1.0"
 
 
 class OpalstackAPITool:
