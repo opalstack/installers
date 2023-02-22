@@ -171,7 +171,7 @@ def main():
     CMD_ENV = {
         "RAILS_ENV": "production",
         "PATH": f"{appdir}/node/bin:{appdir}/mastodon/bin:/opt/rh/rh-ruby30/root/usr/local/bin:/opt/rh/rh-ruby30/root/usr/bin:/opt/bin:/usr/local/bin:/usr/bin:/bin:/usr/pgsql-11/bin/",
-        "LD_LIBRARY_PATH": "{appdir}/mastodon/lib:/opt/rh/rh-ruby30/root/usr/local/lib64:/opt/rh/rh-ruby30/root/usr/lib64:/opt/lib",
+        "LD_LIBRARY_PATH": f"{appdir}/mastodon/lib:/opt/rh/rh-ruby30/root/usr/local/lib64:/opt/rh/rh-ruby30/root/usr/lib64:/opt/lib",
         "TMPDIR": f"{appdir}/tmp",
         "GEM_HOME": f"{appdir}/mastodon",
         "UMASK": "0002",
@@ -277,12 +277,12 @@ def main():
 
     # install nodejs
     cmd = f'mkdir -p {appdir}/node'
-    doit = run_command(cmd)
+    doit = run_command(cmd, CMD_ENV)
     download(LTS_NODE_URL, f'{appdir}/node.tar.xz')
     cmd = f'tar xf {appdir}/node.tar.xz --strip 1'
-    doit = run_command(cmd, cwd=f'{appdir}/node')
+    doit = run_command(cmd, CMD_ENV, cwd=f'{appdir}/node')
     cmd = f"rm -rf {appdir}/node.tar.xz"
-    doit = run_command(cmd)
+    doit = run_command(cmd, CMD_ENV)
 
     # set up yarn
     cmd = "corepack enable"
@@ -470,7 +470,7 @@ def main():
                 pidfile=/home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}/mastodon/tmp/pids/supervisord.pid
                 environment=
                     RAILS_ENV="production",
-                    PATH="/opt/rh/rh-redis5/root/usr/bin:/opt/rh/rh-redis5/root/usr/sbin:/opt/rh/rh-ruby30/root/usr/local/bin:/opt/rh/rh-ruby30/root/usr/bin:/home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}/mastodon/bin:/usr/local/bin:/bin:/usr/bin:/usr/local/sbin:/usr/sbin:/opt/puppetlabs/bin:/home/{appinfo["osuser_name"]}/.local/bin:/home/{appinfo["osuser_name"]}/bin",
+                    PATH="/home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}/node/bin:/opt/rh/rh-redis5/root/usr/bin:/opt/rh/rh-redis5/root/usr/sbin:/opt/rh/rh-ruby30/root/usr/local/bin:/opt/rh/rh-ruby30/root/usr/bin:/home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}/mastodon/bin:/usr/local/bin:/bin:/usr/bin:/usr/local/sbin:/usr/sbin:/opt/puppetlabs/bin:/home/{appinfo["osuser_name"]}/.local/bin:/home/{appinfo["osuser_name"]}/bin",
                     LD_LIBRARY_PATH="/opt/rh/rh-redis5/root/usr/lib64:/opt/rh/rh-ruby30/root/usr/local/lib64:/opt/rh/rh-ruby30/root/usr/lib64",
 
                 [rpcinterface:supervisor]
@@ -589,7 +589,7 @@ def main():
                 RAILS_ENV=production
 
                 # no need to edit below this line
-                export PATH=/opt/rh/rh-redis5/root/usr/bin:/opt/rh/rh-redis5/root/usr/sbin:/opt/rh/rh-ruby30/root/usr/local/bin:/opt/rh/rh-ruby30/root/usr/bin:/home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}/mastodon/bin:/usr/local/bin:/bin:/usr/bin:/usr/local/sbin:/usr/sbin:/opt/puppetlabs/bin:/usr/pgsql-11/bin/:/home/{appinfo["osuser_name"]}/.local/bin:/home/{appinfo["osuser_name"]}/bin:$PATH
+                export PATH=/home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}/node/bin:/opt/rh/rh-redis5/root/usr/bin:/opt/rh/rh-redis5/root/usr/sbin:/opt/rh/rh-ruby30/root/usr/local/bin:/opt/rh/rh-ruby30/root/usr/bin:/home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}/mastodon/bin:/usr/local/bin:/bin:/usr/bin:/usr/local/sbin:/usr/sbin:/opt/puppetlabs/bin:/usr/pgsql-11/bin/:/home/{appinfo["osuser_name"]}/.local/bin:/home/{appinfo["osuser_name"]}/bin:$PATH
                 export LD_LIBRARY_PATH=/opt/rh/rh-redis5/root/usr/lib64:/opt/rh/rh-ruby30/root/usr/local/lib64:/opt/rh/rh-ruby30/root/usr/lib64
                 export GEM_PATH=/opt/rh/rh-ruby30/root/usr/share/gems/:$HOME/apps/$APPNAME/mastodon/vendor/bundle/ruby/3.0.0/gems
                 export GEM_HOME=$HOME/apps/$APPNAME/mastodon/
