@@ -763,7 +763,6 @@ def main():
                     old_domain = args.old_domain
                     new_domain = args.new_domain
                     config_file = "mastodon/.env.production"
-                    environment_file = "mastodon/config/environments/production.rb"
                     nginx_file = "nginx/nginx.conf"
 
                     # get database infomation from config file
@@ -775,9 +774,6 @@ def main():
                     # go!
                     logging.info(f"Replacing domain in {config_file}")
                     replace_text(config_file, old_domain, new_domain)
-
-                    logging.info(f"Replacing domain in {environment_file}")
-                    replace_text(environment_file, old_domain, new_domain)
 
                     logging.info(f"Replacing domain in {nginx_file}")
                     replace_text(nginx_file, old_domain, new_domain)
@@ -794,10 +790,6 @@ def main():
                 '''
     )
     create_file(f"{appdir}/change_domain.py", change_domain, perms=0o775)
-
-    # add localhost to config file
-    cmd = f"""sed -i "3 i config.hosts << 'localhost'" {appdir}/mastodon/config/environments/production.rb"""
-    doit = run_command(cmd, CMD_ENV, cwd=f"{appdir}/mastodon")
 
     # populate database
     cmd = f"rails db:schema:load"
