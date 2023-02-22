@@ -170,7 +170,7 @@ def main():
     appdir = f'/home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}'
     CMD_ENV = {
         "RAILS_ENV": "production",
-        "PATH": f"{appdir}/mastodon/bin:/opt/rh/rh-ruby30/root/usr/local/bin:/opt/rh/rh-ruby30/root/usr/bin:/opt/bin:/usr/local/bin:/usr/bin:/bin:/usr/pgsql-11/bin/",
+        "PATH": f"{appdir}/node/bin:{appdir}/mastodon/bin:/opt/rh/rh-ruby30/root/usr/local/bin:/opt/rh/rh-ruby30/root/usr/bin:/opt/bin:/usr/local/bin:/usr/bin:/bin:/usr/pgsql-11/bin/",
         "LD_LIBRARY_PATH": "{appdir}/mastodon/lib:/opt/rh/rh-ruby30/root/usr/local/lib64:/opt/rh/rh-ruby30/root/usr/lib64:/opt/lib",
         "TMPDIR": f"{appdir}/tmp",
         "GEM_HOME": f"{appdir}/mastodon",
@@ -275,30 +275,20 @@ def main():
     if not os.path.isdir(nginx_dir):
         os.mkdir(nginx_dir)
 
-    # install node
-    cmd = f"rm -rf {appdir}/mastodon/bin/yarn"
-    doit = run_command(cmd, CMD_ENV, cwd=f"{appdir}")
-    download(LTS_NODE_URL, f"{appdir}/mastodon/node.tar.xz")
-    cmd1 = f"cd {appdir}/mastodon; "
-    cmd2 = "tar xf node.tar.xz --strip-components=1 "
-    cmds = cmd1 + cmd2
-    cmd = shlex.split(sh)
-    cmd.append(cmds)
-    doit = run_command(cmd, CMD_ENV, cwd=f"{appdir}/mastodon/", use_shlex=False)
-    cmd = f"rm -rf {appdir}/mastodon/node.tar.xz"
-    doit = run_command(cmd, CMD_ENV, cwd=f"{appdir}")
-    cmd = "corepack enable"
-    doit = run_command(cmd, CMD_ENV, cwd=f"{appdir}/mastodon/")
-    cmd = "yarn set version 1.22.19"
-    doit = run_command(cmd, CMD_ENV, cwd=f"{appdir}/mastodon/")
+    # install nodejs
+    cmd = f'mkdir -p {appdir}/node'
+    doit = run_command(cmd)
+    download(LTS_NODE_URL, f'{appdir}/node.tar.xz')
+    cmd = f'tar xf {appdir}/node.tar.xz --strip 1'
+    doit = run_command(cmd, cwd=f'{appdir}/node')
+    cmd = f"rm -rf {appdir}/node.tar.xz"
+    doit = run_command(cmd)
 
-    # node overwrites some mastodon md files, let's roll those back
-    cmd = f"git checkout -- CHANGELOG.md"
-    doit = run_command(cmd, CMD_ENV, cwd=f"{appdir}/mastodon/")
-    cmd = f"git checkout -- README.md"
-    doit = run_command(cmd, CMD_ENV, cwd=f"{appdir}/mastodon/")
-    cmd = f"git checkout -- LICENSE"
-    doit = run_command(cmd, CMD_ENV, cwd=f"{appdir}/mastodon/")
+    # set up yarn
+    cmd = "corepack enable"
+    doit = run_command(cmd, CMD_ENV)
+    cmd = "yarn set version classic"
+    doit = run_command(cmd, CMD_ENV)
 
     # install dependencies
     cmd = "bundle config deployment 'true'"
