@@ -293,8 +293,12 @@ def main():
 
     # finished, push a notice with credentials
     msg = f'Initial user is {appinfo["osuser_name"]}, password: {pw} - see README in app directory for final steps.'
-    payload = json.dumps([{'id': args.app_uuid}])
-    finished=api.post('/app/installed/', payload)
+
+    installed_payload = json.dumps([{'id': args.app_uuid}])
+    api.post('/app/installed/', installed_payload)
+
+    notice_payload = json.dumps([{'type': 'D', 'content': msg}])
+    api.post('/notice/create/', notice_payload)
 
     logging.info(f'Completed installation of Gitea app {args.app_name} - {msg}')
 
