@@ -170,6 +170,7 @@ def main():
             ; change DOMAIN and ROOT_URL below to your domain and site
             DOMAIN = localhost
             ROOT_URL = http://localhost
+            LFS_START_SERVER = true
 
             [database]
             DB_TYPE = sqlite3
