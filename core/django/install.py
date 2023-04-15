@@ -168,7 +168,7 @@ def main():
     logging.info('Installed latest uWSGI into virtualenv')
 
     # install django
-    cmd = f'{appdir}/env/bin/pip install django'
+    cmd = f'{appdir}/env/bin/pip install django==4.1.8'
     doit = run_command(cmd)
     logging.info('Installed latest Django into virtualenv')
 
