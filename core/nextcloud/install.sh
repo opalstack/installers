@@ -1,5 +1,5 @@
 #! /bin/bash
-# Opalstack Nextcloud Installer 
+# Opalstack Nextcloud Installer
 # only to be used with apache cgi app type APA
 
 CRED2='\033[1;91m'        # Red
@@ -170,17 +170,17 @@ else
     /bin/wget https://download.nextcloud.com/server/releases/latest.tar.bz2 -O $HOME/apps/$APPNAME/latest.tar.bz2
     /bin/tar -xf $HOME/apps/$APPNAME/latest.tar.bz2 nextcloud -C $HOME/apps/$APPNAME/ --strip-components=1
     /bin/rm $HOME/apps/$APPNAME/latest.tar.bz2
-    /bin/rm $HOME/apps/$APPNAME/index.html    
+    /bin/rm $HOME/apps/$APPNAME/index.html
 
     # generate password
     app_pass=`date +%s | sha256sum | base64 | head -c 20`
     echo $app_pass
 
     # install with occ
-    /bin/php74 $HOME/apps/$APPNAME/occ maintenance:install --database pgsql --database-name $DBNAME --database-user $DBUSER --database-pass $DBPWD --admin-user $USER --admin-pass $app_pass --admin-email $accountemail --data-dir $HOME/apps/$APPNAME/data
+    /bin/php82 $HOME/apps/$APPNAME/occ maintenance:install --database pgsql --database-name $DBNAME --database-user $DBUSER --database-pass $DBPWD --admin-user $USER --admin-pass $app_pass --admin-email $accountemail --data-dir $HOME/apps/$APPNAME/data
 
     # set crontab
-    (crontab -l ; echo "*/5  *  *  *  * /bin/php74 $HOME/apps/$APPNAME/cron.php")| crontab -
+    (crontab -l ; echo "*/5  *  *  *  * /bin/php82 $HOME/apps/$APPNAME/cron.php")| crontab -
 
     # Send JSON installed OK.
     /usr/bin/curl -s -X POST --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN" -d'[{"id": "'$UUID'"}]' $API_URL/api/v1/app/installed/
