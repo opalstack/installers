@@ -167,7 +167,8 @@ def main():
     cmd = f'tar xf {appdir}/node.tar.xz --strip 1'
     doit = run_command(cmd, cwd=f'{appdir}/node')
     CMD_ENV['PATH'] = f'{appdir}/node/bin:{CMD_ENV["PATH"]}'
-
+    CMD_ENV['HOME'] = os.environ.get('HOME')
+    
     # install composer
     doit = run_command(f'mkdir -p {appdir}/bin')
     download(COMPOSER_URL, f'{appdir}/bin/composer-setup.php')
