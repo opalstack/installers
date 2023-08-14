@@ -101,12 +101,20 @@ def gen_password(length=20):
 def run_command(cmd, cwd=None, env=CMD_ENV):
     """runs a command, returns output"""
     logging.info(f'Running: {cmd}')
-    result = None  # Initialize the result variable outside the try block
     try:
-        result = subprocess.check_output(shlex.split(cmd), cwd=cwd, env=env)
+        result = subprocess.run(
+            shlex.split(cmd),
+            cwd=cwd,
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=True
+        )
+        return result.stdout  # Return the stdout of the completed process
     except subprocess.CalledProcessError as e:
-        logging.debug(e.output)
-    return result
+        logging.error(e.stderr)
+        return None  # Return None in case of an error
 
 
 def add_cronjob(cronjob):
