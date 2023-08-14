@@ -108,13 +108,14 @@ def run_command(cmd, cwd=None, env=CMD_ENV):
             env=env,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            text=True,
             check=True
         )
-        return result.stdout  # Return the stdout of the completed process
+        stdout = result.stdout.decode('utf-8')
+        stderr = result.stderr.decode('utf-8')
+        return stdout, stderr
     except subprocess.CalledProcessError as e:
         logging.error(e.stderr)
-        return None  # Return None in case of an error
+        return None, e.stderr.decode('utf-8')
 
 
 def add_cronjob(cronjob):
