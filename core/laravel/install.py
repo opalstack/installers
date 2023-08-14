@@ -157,7 +157,7 @@ def main():
 
     # install composer
     run_command(f'mkdir -p {appdir}/bin')
-    download(COMPOSER_URL, f'{appdir}/bin/composer-setup.php', writemode='w')
+    download(COMPOSER_URL, f'{appdir}/bin/composer-setup.php')
     run_command( f'/bin/php82 {appdir}/bin/composer-setup.php --install-dir={appdir}/bin --filename=composer')
 
 
