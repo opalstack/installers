@@ -156,9 +156,9 @@ def main():
     CMD_ENV['PATH'] = f'{appdir}/node/bin:{CMD_ENV["PATH"]}'
 
     # install composer
-    run_command(f'mkdir -p {appdir}/bin')
+    doit = run_command(f'mkdir -p {appdir}/bin')
     download(COMPOSER_URL, f'{appdir}/bin/composer-setup.php')
-    run_command( f'/bin/php82 {appdir}/bin/composer-setup.php --install-dir={appdir}/bin --filename=composer')
+    doit = run_command( f'/bin/php82 {appdir}/bin/composer-setup.php --install-dir={appdir}/bin --filename=composer')
 
 
     pattern = r'^#!/usr/bin/env php$'
