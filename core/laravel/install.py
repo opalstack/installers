@@ -182,7 +182,7 @@ def main():
     payload = json.dumps([{'id': args.app_uuid}])
     finished=api.post('/app/installed/', payload)
 
-    logging.info(f'Completed installation of Node.js app {args.app_name}')
+    logging.info(f'Completed installation of Laravel app {args.app_name}')
 
 
 if __name__ == '__main__':
