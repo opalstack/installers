@@ -175,19 +175,6 @@ def main():
     doit = run_command( f'/bin/php82 {appdir}/bin/composer-setup.php --install-dir={appdir}/bin --filename=composer')
 
 
-    pattern = r'^#!/usr/bin/env php$'
-    replacement = '#!/usr/bin/env php82'
-    file_path = f'{appdir}/bin/composer'
-
-    with open(file_path, 'r') as file:
-        content = file.read()
-
-    new_content = re.sub(pattern, replacement, content, flags=re.MULTILINE)
-
-    with open(file_path, 'w') as file:
-        file.write(new_content)
-
-
     # finished, push a notice
     msg = f'See README in app directory for more info.'
     payload = json.dumps([{'id': args.app_uuid}])
