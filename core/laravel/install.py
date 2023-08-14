@@ -125,7 +125,7 @@ def main():
     """run it"""
     # grab args from cmd or env
     parser = argparse.ArgumentParser(
-        description='Installs Node.js web app on Opalstack account')
+        description='Installs Laravel web app on Opalstack account')
     parser.add_argument('-i', dest='app_uuid', help='UUID of the base app',
                         default=os.environ.get('UUID'))
     parser.add_argument('-n', dest='app_name', help='name of the base app',
@@ -157,7 +157,7 @@ def main():
 
     # install composer
     run_command(f'mkdir -p {appdir}/bin')
-    download(LTS_NODE_URL, f'{appdir}/bin/composer-setup.php')
+    download(COMPOSER_URL, f'{appdir}/bin/composer-setup.php', writemode='w')
     run_command( f'/bin/php82 {appdir}/bin/composer-setup.php --install-dir={appdir}/bin --filename=composer')
 
 
