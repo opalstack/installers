@@ -103,12 +103,13 @@ def run_command(cmd, cwd=None, env=CMD_ENV):
     logging.info(f'Running: {cmd}')
     try:
         result = subprocess.run(
-            shlex.split(cmd),
+            cmd,  # Pass the command as a single string when using shell=True
             cwd=cwd,
             env=env,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            check=True
+            check=True,
+            shell=True  # Use shell interpretation
         )
         stdout = result.stdout.decode('utf-8')
         stderr = result.stderr.decode('utf-8')
