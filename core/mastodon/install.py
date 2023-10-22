@@ -24,7 +24,7 @@ CMD_ENV = {
     "UMASK": "0002",
 }
 LTS_NODE_URL = "https://nodejs.org/dist/v16.18.1/node-v16.18.1-linux-x64.tar.xz"
-MASTODON_VERSION = "4.1.0"
+MASTODON_VERSION = "4.1.10"
 
 
 class OpalstackAPITool:
@@ -254,7 +254,7 @@ def main():
     # install mastodon
     cmd = f"git clone https://github.com/tootsuite/mastodon.git mastodon"
     doit = run_command(cmd, CMD_ENV, cwd=f"{appdir}")
-    cmd = f"git checkout v{MASTODON_VERSION}"
+    cmd = f"git checkout -f v{MASTODON_VERSION}"
     doit = run_command(cmd, CMD_ENV, cwd=f"{appdir}/mastodon")
     tmp_dir = f"{appdir}/mastodon/tmp"
     if not os.path.isdir(tmp_dir):
