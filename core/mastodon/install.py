@@ -23,8 +23,8 @@ CMD_ENV = {
     "PATH": "/usr/local/bin:/usr/bin:/bin",
     "UMASK": "0002",
 }
-LTS_NODE_URL = "https://nodejs.org/dist/v16.18.1/node-v16.18.1-linux-x64.tar.xz"
-MASTODON_VERSION = "4.1.10"
+LTS_NODE_URL = "https://nodejs.org/download/release/v16.20.2/node-v16.20.2-linux-x64.tar.xz"
+MASTODON_VERSION = "4.2.1"
 
 
 class OpalstackAPITool:
@@ -89,6 +89,13 @@ def create_file(path, contents, writemode="w", perms=0o600):
         f.write(contents)
     os.chmod(path, perms)
     logging.info(f"Created file {path} with permissions {oct(perms)}")
+
+
+def append_file(path, contents, writemode="a"):
+    """append a file"""
+    with open(path, writemode) as f:
+        f.write(contents)
+    logging.info(f"Appended file {path}")
 
 
 def download(url, localfile, writemode="wb", perms=0o600):
@@ -291,6 +298,7 @@ def main():
     doit = run_command(cmd, CMD_ENV)
 
     # install dependencies
+    doit = run_command(cmd, CMD_ENV, cwd=f"{appdir}/mastodon/")
     cmd = "bundle config deployment 'true'"
     doit = run_command(cmd, CMD_ENV, cwd=f"{appdir}/mastodon/")
     cmd = "bundle config without 'development test'"
@@ -809,6 +817,24 @@ def main():
     cmd = shlex.split(sh)
     cmd.append(cmds)
     doit = run_command(cmd, CMD_ENV, cwd=f"{appdir}/mastodon/", use_shlex=False)
+
+    # downgrade uri version to avoid errors in bundle commands
+    gemfile = textwrap.dedent(
+        f"""\
+            
+                # Needed to avoid this error with bundle commands:
+                # You have already activated uri 0.10.1, but your Gemfile 
+                # requires uri 0.12.2. Since uri is a default gem, you can 
+                # either remove your dependency on it or try updating to a 
+                # newer version of bundler that supports uri as a default gem.
+                gem 'uri', '0.10.1'
+                """
+    )
+    append_file(f"{appdir}/mastodon/Gemfile", gemfile)
+    cmd = "bundle config unset deployment"
+    doit = run_command(cmd, CMD_ENV, cwd=f"{appdir}/mastodon/")
+    cmd = "bundle update uri"
+    doit = run_command(cmd, CMD_ENV, cwd=f"{appdir}/mastodon/")
 
     # install supervisord
     cmd = f"pip3.11 install --target={appdir}/mastodon/bin/ supervisor"
