@@ -46,6 +46,9 @@ else
 fi;
 echo $PORT
 
+PATH=/usr/local/bin:/bin:/usr/bin:/usr/local/sbin:/usr/sbin:/opt/puppetlabs/bin:$HOME/.local/bin:$HOME/bin:
+export PATH
+
 /bin/wget https://memcached.org/files/memcached-1.6.22.tar.gz -O $HOME/apps/$APPNAME/memcached-1.6.22.tar.gz
 mkdir $HOME/apps/$APPNAME/src
 /bin/tar -xf $HOME/apps/$APPNAME/memcached-1.6.22.tar.gz -C $HOME/apps/$APPNAME/src --strip-components=1
