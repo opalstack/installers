@@ -112,13 +112,21 @@ CRON_JOB="$HOME/bin/memcached -d -s $HOME/apps/$APPNAME/memcached.sock -P $HOME/
 # Add the cron job to crontab
 (crontab -l 2>/dev/null; echo "@reboot $CRON_JOB") | crontab -
 
-
 # Create the start script
 cat <<EOF >$HOME/apps/$APPNAME/start
 #!/bin/bash
 
+# Check if memcached is already running
+if [ -f \$HOME/apps/$APPNAME/memcached.pid ]; then
+    PID=\$(cat \$HOME/apps/$APPNAME/memcached.pid)
+    if ps -p \$PID > /dev/null 2>&1; then
+        echo "memcached is already running."
+        exit 1
+    fi
+fi
+
 # Start memcached command
-$HOME/bin/memcached -d -s $HOME/apps/$APPNAME/memcached.sock -P $HOME/apps/$APPNAME/memcached.pid -m 256
+\$HOME/bin/memcached -d -s \$HOME/apps/$APPNAME/memcached.sock -P \$HOME/apps/$APPNAME/memcached.pid -m 256
 EOF
 
 # Create the stop script
@@ -145,8 +153,6 @@ chmod +x $HOME/apps/$APPNAME/start
 chmod +x $HOME/apps/$APPNAME/stop
 
 echo "Start and stop scripts for memcached have been created."
-
-
 
 # add installed OK
 /usr/bin/curl -s -X POST --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN" -d'[{"id": "'$UUID'"}]' $API_URL/api/v1/app/installed/
