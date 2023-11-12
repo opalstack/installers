@@ -54,5 +54,5 @@ mkdir $HOME/apps/$APPNAME/src
 /bin/tar -xf $HOME/apps/$APPNAME/memcached-1.6.22.tar.gz -C $HOME/apps/$APPNAME/src --strip-components=1
 cd $HOME/apps/$APPNAME/src/
 $HOME/apps/$APPNAME/src/configure --prefix=$HOME
-$HOME/apps/$APPNAME/src/make && $HOME/apps/$APPNAME/memcached-1.6.22/make install
+/bin/make && /bin/make install
 $HOME/bin/memcached -d -u memcached -l 127.0.0.1 -p $PORT -m 256
