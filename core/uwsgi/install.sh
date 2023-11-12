@@ -48,7 +48,6 @@ else
          echo 'UUID validation and server lookup failed.'
          exit 1
     fi;
-    B
 fi;
 echo $PORT
 
