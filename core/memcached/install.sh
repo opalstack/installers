@@ -47,8 +47,9 @@ fi;
 echo $PORT
 
 /bin/wget https://memcached.org/files/memcached-1.6.22.tar.gz -O $HOME/apps/$APPNAME/memcached-1.6.22.tar.gz
-/bin/tar -xf $HOME/apps/$APPNAME/memcached-1.6.22.tar.gz memcached-1.6.22 -C $HOME/apps/$APPNAME/ --strip-components=1
-cd $HOME/apps/$APPNAME/memcached-1.6.22/
-$HOME/apps/$APPNAME/memcached-1.6.22//configure --prefix=$HOME
-$HOME/apps/$APPNAME/memcached-1.6.22/make && $HOME/apps/$APPNAME/memcached-1.6.22/make install
+mkdir $HOME/apps/$APPNAME/src
+/bin/tar -xf $HOME/apps/$APPNAME/memcached-1.6.22.tar.gz memcached-1.6.22 -C $HOME/apps/$APPNAME/src --strip-components=1
+cd $HOME/apps/$APPNAME/src/
+$HOME/apps/$APPNAME/src/configure --prefix=$HOME
+$HOME/apps/$APPNAME/src/make && $HOME/apps/$APPNAME/memcached-1.6.22/make install
 $HOME/bin/memcached -d -u memcached -l 127.0.0.1 -p $PORT -m 256
