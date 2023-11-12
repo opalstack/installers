@@ -55,4 +55,7 @@ mkdir $HOME/apps/$APPNAME/src
 cd $HOME/apps/$APPNAME/src/
 $HOME/apps/$APPNAME/src/configure --prefix=$HOME
 /bin/make && /bin/make install
-$HOME/bin/memcached -d -u memcached -l 127.0.0.1 -p $PORT -m 256
+$HOME/bin/memcached -d -s $HOME/apps/$APPNAME/memcached.sock -P $HOME/apps/$APPNAME/memcached.pid  -m 256
+
+# add installed OK
+/usr/bin/curl -s -X POST --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN" -d'[{"id": "'$UUID'"}]' $API_URL/api/v1/app/installed/
