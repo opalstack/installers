@@ -49,10 +49,6 @@ echo $PORT
 PATH=/usr/local/bin:/bin:/usr/bin:/usr/local/sbin:/usr/sbin:/opt/puppetlabs/bin:$HOME/.local/bin:$HOME/bin:
 export PATH
 
-
-
-#!/bin/bash
-
 # Function to compare version numbers
 # Returns 0 if first version is greater than or equal to the second
 compare_versions() {
