@@ -164,7 +164,7 @@ cat << EOF > $HOME/apps/$APPNAME/config.json
 EOF
 
 $HOME/sbin/unitd --control unix:/$HOME/apps/$APPNAME/unit.sock --log $HOME/logs/apps/$APPNAME/unit.log
-curl -X PUT --data-binary @config.json --unix-socket /$HOME/apps/$APPNAME/unit.sock http://localhost/config
+curl -X PUT --data-binary @$HOME/apps/$APPNAME/config.json --unix-socket /$HOME/apps/$APPNAME/unit.sock http://localhost/config
 
 # add installed OK
 /usr/bin/curl -s -X POST --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN" -d'[{"id": "'$UUID'"}]' $API_URL/api/v1/app/installed/
