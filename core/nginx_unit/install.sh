@@ -49,7 +49,7 @@ PATH=/usr/local/bin:/bin:/usr/bin:/usr/local/sbin:/usr/sbin:/opt/puppetlabs/bin:
 export PATH
 
 mkdir -p $HOME/apps/$APPNAME/tmp $HOME/apps/$APPNAME/src
-export TMPDIR=$HOME/tmp
+export TMPDIR=$HOME/apps/$APPNAME/tmp
 export LD_LIBRARY_PATH=$HOME/lib
 
 # curl
