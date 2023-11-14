@@ -48,7 +48,6 @@ echo $PORT
 PATH=/usr/local/bin:/bin:/usr/bin:/usr/local/sbin:/usr/sbin:/opt/puppetlabs/bin:$HOME/.local/bin:$HOME/bin:
 export PATH
 
-
 mkdir -p $HOME/apps/$APPNAME/tmp $HOME/apps/$APPNAME/src
 export TMPDIR=$HOME/apps/$APPNAME/tmp
 export LD_LIBRARY_PATH=$HOME/lib:/opt/rh/rh-ruby30/root/usr/local/lib64:/opt/rh/rh-ruby30/root/usr/lib64:/opt/lib
@@ -106,7 +105,7 @@ phpinfo(INFO_MODULES);
 ?>' > $HOME/apps/$APPNAME/www/index.php
 
 # Define the cron job command
-CRON_JOB="$HOME/sbin/unitd --control unix:/$HOME/apps/$APPNAME/unit.sock --log $HOME/logs/apps/$APPNAME/unit.log"
+CRON_JOB="$HOME/sbin/unitd --control unix:/$HOME/apps/$APPNAME/unit.sock --pid /$HOME/apps/$APPNAME/unit.pid --log $HOME/logs/apps/$APPNAME/unit.log" 
 
 # Add the cron job to crontab
 (crontab -l 2>/dev/null; echo "@reboot $CRON_JOB") | crontab -
@@ -170,7 +169,7 @@ cat << EOF > $HOME/apps/$APPNAME/config.json
 }
 EOF
 
-$HOME/sbin/unitd --control unix:/$HOME/apps/$APPNAME/unit.sock --log $HOME/logs/apps/$APPNAME/unit.log
+$HOME/sbin/unitd --control unix:/$HOME/apps/$APPNAME/unit.sock --pid /$HOME/apps/$APPNAME/unit.pid --log $HOME/logs/apps/$APPNAME/unit.log
 curl -X PUT --data-binary @$HOME/apps/$APPNAME/config.json --unix-socket /$HOME/apps/$APPNAME/unit.sock http://localhost/config
 
 # add installed OK
