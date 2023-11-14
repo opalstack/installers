@@ -48,6 +48,11 @@ echo $PORT
 PATH=/usr/local/bin:/bin:/usr/bin:/usr/local/sbin:/usr/sbin:/opt/puppetlabs/bin:$HOME/.local/bin:$HOME/bin:
 export PATH
 
+export PATH=/opt/rh/rh-ruby30/root/usr/local/bin:/opt/rh/rh-ruby30/root/usr/bin:/opt/bin:$HOME/apps/$APPNAME/env/bin:$PATH
+export GEM_PATH=/opt/rh/rh-ruby30/root/usr/share/gems:$HOME/apps/$APPNAME/env/gems
+export LD_LIBRARY_PATH=/opt/rh/rh-ruby30/root/usr/local/lib64:/opt/rh/rh-ruby30/root/usr/lib64:/opt/lib
+export GEM_HOME=$HOME/apps/$APPNAME/env
+
 mkdir -p $HOME/apps/$APPNAME/tmp $HOME/apps/$APPNAME/src
 export TMPDIR=$HOME/apps/$APPNAME/tmp
 export LD_LIBRARY_PATH=$HOME/lib
