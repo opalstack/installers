@@ -65,11 +65,11 @@ make && make install
 
 # php
 cd $HOME/apps/$APPNAME/src
-/bin/wget https://www.php.net/distributions/php-8.1.2.tar.xz -O $HOME/apps/$APPNAME/src/php-8.1.2.tar.xz
-mkdir $HOME/apps/$APPNAME/src/php-8.1.2
-cd $HOME/apps/$APPNAME/src/php-8.1.2
-/bin/tar -xf $HOME/apps/$APPNAME/src/php-8.1.2.tar.xz -C $HOME/apps/$APPNAME/src/php-8.1.2 --strip-components=1
-cd $HOME/apps/$APPNAME/src/php-8.1.2
+/bin/wget https://www.php.net/distributions/php-8.2.12.tar.xz -O $HOME/apps/$APPNAME/src/php-8.2.12.tar.xz
+mkdir $HOME/apps/$APPNAME/src/php-8.2.12
+cd $HOME/apps/$APPNAME/src/php-8.2.12
+/bin/tar -xf $HOME/apps/$APPNAME/src/php-8.2.12.tar.xz -C $HOME/apps/$APPNAME/src/php-8.2.12 --strip-components=1
+cd $HOME/apps/$APPNAME/src/php-8.2.12
 ./configure --prefix=$HOME --enable-gd --enable-opcache --with-pdo-mysql --with-pdo-pgsql=/usr/pgsql-11 --enable-bcmath --enable-calendar --enable-exif --enable-ftp --enable-mbstring --enable-soap --with-curl=$HOME --with-gettext --with-gmp --with-iconv --with-kerberos --with-mhash --with-mysqli --with-openssl --with-pgsql=/usr/pgsql-11 --with-xsl --with-zlib-dir --enable-sockets --enable-intl --with-mysql-sock=/var/lib/mysql/mysql.sock --enable-fpm --with-zlib --enable-embed
 make && make install
 
