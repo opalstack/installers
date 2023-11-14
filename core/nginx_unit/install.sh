@@ -110,6 +110,47 @@ CRON_JOB="$HOME/sbin/unitd --control unix:/$HOME/apps/$APPNAME/unit.sock --pid /
 # Add the cron job to crontab
 (crontab -l 2>/dev/null; echo "@reboot $CRON_JOB") | crontab -
 
+
+# Create the start script
+cat <<EOF >$HOME/apps/$APPNAME/start
+#!/bin/bash
+
+# Check if unit is already running
+if [ -f \$HOME/apps/$APPNAME/unit.pid ]; then
+    PID=\$(cat \$HOME/apps/$APPNAME/unit.pid)
+    if ps -p \$PID > /dev/null 2>&1; then
+        echo "unit is already running."
+        exit 1
+    fi
+fi
+
+# Start unit command
+\$HOME/sbin/unitd --control unix:/\$HOME/apps/\$APPNAME/unit.sock --pid /\$HOME/apps/\$APPNAME/unit.pid --log \$HOME/logs/apps/\$APPNAME/unit.log
+EOF
+
+# Create the stop script
+cat <<EOF >$HOME/apps/$APPNAME/stop
+#!/bin/bash
+
+# Check if the PID file exists
+if [ -f \$HOME/apps/$APPNAME/unit.pid ]; then
+    # Read the PID from the file
+    PID=\$(cat \$HOME/apps/$APPNAME/unit.pid)
+
+    # Kill the process
+    kill \$PID
+
+    # Optionally, you can also remove the PID file after stopping
+    rm \$HOME/apps/$APPNAME/unit.pid
+else
+    echo "PID file does not exist. Is unit running?"
+fi
+EOF
+
+# Make the scripts executable
+chmod +x $HOME/apps/$APPNAME/start
+chmod +x $HOME/apps/$APPNAME/stop
+
 cat << EOF > $HOME/apps/$APPNAME/config.json
 {
   "listeners": {
