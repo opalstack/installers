@@ -77,6 +77,9 @@ git clone https://github.com/nginx/unit $HOME/apps/$APPNAME/src/unit
 cd $HOME/apps/$APPNAME/src/unit
 ./configure --prefix=$HOME --libdir=$HOME/lib --includedir=$HOME/include --datarootdir=$HOME/share --mandir=$HOME/share/man 
 ./configure php --config=$HOME/bin/php-config --lib-path=$HOME/lib --module=php_81
+./configure perl
+./configure python --config=/usr/bin/python3.6-config --module=python_36
+./configure ruby  --ruby=/opt/rh/rh-ruby30/root/bin/ruby --module=ruby_30
 make && make install
 
 mkdir $HOME/apps/$APPNAME/www
@@ -168,3 +171,6 @@ curl -X PUT --data-binary @$HOME/apps/$APPNAME/config.json --unix-socket /$HOME/
 
 # add installed OK
 /usr/bin/curl -s -X POST --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN" -d'[{"id": "'$UUID'"}]' $API_URL/api/v1/app/installed/
+
+# add php-memcached
+# add start/stop
