@@ -16,7 +16,7 @@ from urllib.parse import urlparse
 
 API_HOST = os.environ.get('API_URL').strip('https://').strip('http://')
 API_BASE_URI = '/api/v1'
-GITEA_URL = 'https://github.com/go-gitea/gitea/releases/download/v1.17.4/gitea-1.17.4-linux-amd64'
+GITEA_URL = 'https://github.com/go-gitea/gitea/releases/download/v1.21.1/gitea-1.21.1-linux-amd64'
 CMD_ENV = {'PATH': '/usr/local/bin:/usr/bin:/bin','UMASK': '0002',}
 
 
@@ -182,7 +182,7 @@ def main():
             INSTALL_LOCK = true
 
             [git]
-            PATH = /opt/rh/sclo-git212/root/usr/bin/git
+            PATH = /opt/rh/rh-git227/root/usr/bin/git
             ''')
     create_file(f'{appdir}/custom/conf/app.ini', gitea_conf)
 
@@ -213,9 +213,8 @@ def main():
                   exit 99
                 fi
 
-                nohup "{appdir}/gitea" >> $HOME/logs/apps/{appinfo["name"]}/gitea.log 2>&1 &
+                scl enable rh-git227 -- /usr/sbin/daemonize -a -c $PWD -p $PIDFILE -e $HOME/logs/apps/{appinfo["name"]}/gitea_error.log -o $HOME/logs/apps/{appinfo["name"]}/gitea.log $PWD/gitea
 
-                echo $! > "$PIDFILE"
                 chmod 600 "$PIDFILE"
                 echo "Started."
                 ''')
