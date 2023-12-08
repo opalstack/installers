@@ -182,7 +182,7 @@ def main():
             INSTALL_LOCK = true
 
             [git]
-            PATH = /opt/rh/sclo-git212/root/usr/bin/git
+            PATH = /opt/rh/rh-git227/root/usr/bin/git
             ''')
     create_file(f'{appdir}/custom/conf/app.ini', gitea_conf)
 
