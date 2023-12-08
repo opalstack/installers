@@ -213,9 +213,8 @@ def main():
                   exit 99
                 fi
 
-                nohup "{appdir}/gitea" >> $HOME/logs/apps/{appinfo["name"]}/gitea.log 2>&1 &
+                scl enable rh-git227 -- /usr/sbin/daemonize -a -c $PWD -p $PIDFILE -e $HOME/logs/apps/{appinfo["name"]}/gitea_error.log -o $HOME/logs/apps/{appinfo["name"]}/gitea.log $PWD/gitea
 
-                echo $! > "$PIDFILE"
                 chmod 600 "$PIDFILE"
                 echo "Started."
                 ''')
