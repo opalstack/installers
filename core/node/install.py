@@ -17,7 +17,6 @@ from urllib.parse import urlparse
 API_HOST = os.environ.get('API_URL').strip('https://').strip('http://')
 API_BASE_URI = '/api/v1'
 CMD_ENV = {'PATH': '/usr/local/bin:/usr/bin:/bin','UMASK': '0002',}
-LTS_NODE_URL = 'https://nodejs.org/dist/v16.16.0/node-v16.16.0-linux-x64.tar.xz'
 
 
 class OpalstackAPITool():
@@ -149,16 +148,11 @@ def main():
     api = OpalstackAPITool(API_HOST, API_BASE_URI, args.opal_token, args.opal_user, args.opal_password)
     appinfo = api.get(f'/app/read/{args.app_uuid}')
     appdir = f'/home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}'
+    CMD_ENV['HOME'] = f'/home/{appinfo["osuser_name"]}/'  
 
-    # get current LTS nodejs
-    cmd = f'mkdir -p {appdir}/node'
+    # make myproject/index.js
+    cmd = f'mkdir -p {appdir}/myproject'
     doit = run_command(cmd)
-    download(LTS_NODE_URL, f'{appdir}/node.tar.xz')
-    cmd = f'tar xf {appdir}/node.tar.xz --strip 1'
-    doit = run_command(cmd, cwd=f'{appdir}/node')
-    CMD_ENV['PATH'] = f'{appdir}/node/bin:{CMD_ENV["PATH"]}'
-
-    # make app.js
     NEWLINE = '\\n'
     appjs = textwrap.dedent(f'''\
             const http = require('http');
@@ -175,52 +169,80 @@ def main():
             server.listen(port, hostname, () => {{
               console.log(`Server running at http://${{hostname}}:${{port}}/`);
             }});''')
-    create_file(f'{appdir}/app.js', appjs, perms=0o600)
+    create_file(f'{appdir}/myproject/index.js', appjs, perms=0o600)
+
+    # make myproject/index.js
+    pkgjson = textwrap.dedent(f'''\
+            {{
+              "name": "myproject",
+              "version": "1.0.0",
+              "description": "Hello world",
+              "main": "index.js",
+              "scripts": {{
+                "start": "node index.js"
+              }}
+            }}''')
+    create_file(f'{appdir}/myproject/package.json', pkgjson, perms=0o600)
 
     # start script
     start_script = textwrap.dedent(f'''\
                 #!/bin/bash
-                export TMPDIR={appdir}/tmp
-                mkdir -p {appdir}/tmp
-                PIDFILE="{appdir}/tmp/node.pid"
-                NODE={appdir}/node/bin/node
 
-                if [ -e "$PIDFILE" ] && (pgrep -u {appinfo["osuser_name"]} | grep -x -f $PIDFILE &> /dev/null); then
-                  echo "Node.js for {appinfo["name"]} already running."
+                APPNAME={appinfo["name"]}
+
+                # set node version via scl
+                source scl_source enable nodejs20
+                NODE=$( which node )
+                NPM=$( which npm )
+
+                # set your project info here
+                PROJECT=myproject
+                STARTCMD="$NPM start"
+
+                APPDIR=$HOME/apps/$APPNAME
+                LOGDIR=$HOME/logs/apps/$APPNAME
+                TMPDIR=$APPDIR/tmp
+                PROJECTDIR=$APPDIR/$PROJECT
+                PIDFILE=$TMPDIR/node.pid
+
+                mkdir -p $APPDIR/tmp
+
+                if [ -e "$PIDFILE" ] && (pgrep -F $PIDFILE &> /dev/null); then
+                  echo "$APPNAME already running."
                   exit 99
                 fi
 
-                cd {appdir}
-                /usr/sbin/daemonize -c {appdir} -a -e ~/logs/apps/{appinfo["name"]}/node_error.log -o ~/logs/apps/{appinfo["name"]}/node_output.log -p $PIDFILE $NODE app.js
+                /usr/sbin/daemonize -c $PROJECTDIR -a -e $LOGDIR/error.log -o $LOGDIR/console.log -p $PIDFILE $STARTCMD
 
-                echo "Started Node.js for {appinfo["name"]}."
+                echo "Started $APPNAME."
                 ''')
     create_file(f'{appdir}/start', start_script, perms=0o700)
 
     # stop script
     stop_script = textwrap.dedent(f'''\
                 #!/bin/bash
-                PIDFILE="{appdir}/tmp/node.pid"
+
+                APPNAME={appinfo["name"]}
+
+                PIDFILE="$HOME/apps/$APPNAME/tmp/node.pid"
 
                 if [ ! -e "$PIDFILE" ]; then
-                    echo "$PIDFILE missing, maybe Node.js is already stopped?"
+                    echo "$PIDFILE missing, maybe $APPNAME is already stopped?"
                     exit 99
                 fi
 
-                PID=$(cat $PIDFILE)
-
-                if [ -e "$PIDFILE" ] && (pgrep -u {appinfo["osuser_name"]} | grep -x -f $PIDFILE &> /dev/null); then
-                  kill $PID
+                if [ -e "$PIDFILE" ] && (pgrep -F $PIDFILE &> /dev/null); then
+                  pkill -g $(cat $PIDFILE)
                   sleep 3
                 fi
 
-                if [ -e "$PIDFILE" ] && (pgrep -u {appinfo["osuser_name"]} | grep -x -f $PIDFILE &> /dev/null); then
-                  echo "Node.js did not stop, killing it."
+                if [ -e "$PIDFILE" ] && (pgrep -F $PIDFILE &> /dev/null); then
+                  echo "$APPNAME did not stop, killing it."
                   sleep 3
-                  kill -9 $PID
+                  pkill -9 -g $(cat $PIDFILE)
                 fi
                 rm -f $PIDFILE
-                echo "Stopped."
+                echo "Stopped $APPNAME."
                 ''')
     create_file(f'{appdir}/stop', stop_script, perms=0o700)
 
