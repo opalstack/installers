@@ -269,7 +269,7 @@ def main():
                 ''')
     create_file(f'{appdir}/README', readme)
 
-    run_command(f'cd $PROJECTDIR && source scl_source enable nodejs20 && npx create-next-app@latest next --use-npm --typescript --eslint --tailwind --src-dir --app --import-alias "@/*"')
+    run_command(f'cd {appdir} && source scl_source enable nodejs20 && npx create-next-app@latest next --use-npm --typescript --eslint --tailwind --src-dir --app --import-alias "@/*"')
 
     # start it
     cmd = f'{appdir}/start'
