@@ -19,7 +19,8 @@ import urllib.request
 API_HOST = os.environ.get('API_URL').strip('https://').strip('http://')
 API_BASE_URI = '/api/v1'
 CMD_ENV = {'PATH': '/usr/local/bin:/usr/bin:/bin','UMASK': '0002',}
-LTS_NODE_URL = 'https://nodejs.org/dist/v16.13.1/node-v16.13.1-linux-x64.tar.xz'
+# TODO new node
+# LTS_NODE_URL = 'https://nodejs.org/dist/v16.13.1/node-v16.13.1-linux-x64.tar.xz'
 
 
 
@@ -138,24 +139,28 @@ def main():
     api = OpalstackAPITool(API_HOST, API_BASE_URI, args.opal_token, args.opal_user, args.opal_password)
     appinfo = api.get(f'/app/read/{args.app_uuid}')
     appdir = f'/home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}'
-    CMD_ENV = {'PATH': f'/opt/rh/rh-ruby30/root/usr/local/bin:/opt/rh/rh-ruby30/root/usr/bin:/opt/bin:{appdir}/myproject/bin:{appdir}/env/bin:/usr/local/bin:/usr/bin:/bin',
-            'LD_LIBRARY_PATH': '/opt/rh/rh-ruby30/root/usr/local/lib64:/opt/rh/rh-ruby30/root/usr/lib64:/opt/lib',
+    # TODO node and ruby paths
+    CMD_ENV = {'PATH': f'/opt/ruby32/usr/bin:/opt/ruby32/usr/bin:/opt/nodejs20/bin:/opt/bin:{appdir}/myproject/bin:{appdir}/env/bin:/usr/local/bin:/usr/bin:/bin',
+            'LD_LIBRARY_PATH': '/opt/ruby32/usr/lib64:/opt/ruby32/usr/lib64:/opt/lib',
                'TMPDIR': f'{appdir}/tmp',
                'GEM_HOME': f'{appdir}/env',
                'UMASK': '0002',
                'HOME': f'/home/{appinfo["osuser_name"]}',}
     # make dirs env and tmp
     os.mkdir(f'{appdir}/env')
+    os.mkdir(f'{appdir}/env/bin')
     os.mkdir(f'{appdir}/tmp')
 
+    # TODO use new node
     # install node into env
-    download(LTS_NODE_URL, f'{appdir}/node.tar.xz')
-    cmd = f'tar xf {appdir}/node.tar.xz --strip 1'
-    doit = run_command(cmd, CMD_ENV, cwd=f'{appdir}/env')
+    # download(LTS_NODE_URL, f'{appdir}/node.tar.xz')
+    # cmd = f'tar xf {appdir}/node.tar.xz --strip 1'
+    # doit = run_command(cmd, CMD_ENV, cwd=f'{appdir}/env')
 
+    # TODO use new node
     # install yarn into env
-    download('https://yarnpkg.com/latest.tar.gz', f'{appdir}/tmp/yarn.tar.gz', perms=0o700)
-    cmd = f'tar zxf {appdir}/tmp/yarn.tar.gz --strip 1'
+    # download('https://yarnpkg.com/latest.tar.gz', f'{appdir}/tmp/yarn.tar.gz', perms=0o700)
+    cmd = f'corepack enable --install-directory={appdir}/env/bin'
     doit = run_command(cmd, CMD_ENV, cwd=f'{appdir}/env')
 
     # install rails and puma
@@ -187,9 +192,10 @@ def main():
 
                 # no need to edit below this line
                 PIDFILE="$PROJECTDIR/tmp/pids/server.pid"
-                export PATH=/opt/rh/rh-ruby30/root/usr/local/bin:/opt/rh/rh-ruby30/root/usr/bin:/opt/bin:$PROJECTDIR/bin:$HOME/apps/$APPNAME/env/bin:$PATH
-                export GEM_PATH=/opt/rh/rh-ruby30/root/usr/share/gems/:$HOME/apps/$APPNAME/env/gems
-                export LD_LIBRARY_PATH=/opt/rh/rh-ruby30/root/usr/local/lib64:/opt/rh/rh-ruby30/root/usr/lib64:/opt/lib
+                # TODO node and ruby paths
+                export PATH=/opt/ruby32/usr/bin:/opt/ruby32/usr/bin:/opt/nodejs20/bin:/opt/bin:$PROJECTDIR/bin:$HOME/apps/$APPNAME/env/bin:$PATH
+                export GEM_PATH=/opt/ruby32/usr/lib64/ruby/gems/:$HOME/apps/$APPNAME/env/gems
+                export LD_LIBRARY_PATH=/opt/ruby32/usr/lib64:/opt/ruby32/usr/lib64:/opt/lib
                 export GEM_HOME=$HOME/apps/$APPNAME/env
 
                 if [ -e "$PIDFILE" ] && (pgrep -u seantest | grep -x -f $PIDFILE &> /dev/null); then
@@ -358,9 +364,10 @@ def main():
 
                 # no need to edit below this line
                 PIDFILE="$PROJECTDIR/tmp/pids/server.pid"
-                export PATH=/opt/rh/rh-ruby30/root/usr/local/bin:/opt/rh/rh-ruby30/root/usr/bin:/opt/bin:$PROJECTDIR/bin:$HOME/apps/$APPNAME/env/bin:$PATH
-                export GEM_PATH=/opt/rh/rh-ruby30/root/usr/share/gems/:$HOME/apps/$APPNAME/env/gems
-                export LD_LIBRARY_PATH=/opt/rh/rh-ruby30/root/usr/local/lib64:/opt/rh/rh-ruby30/root/usr/lib64:/opt/lib
+                # TODO node and ruby paths
+                export PATH=/opt/ruby32/usr/bin:/opt/ruby32/usr/bin:/opt/nodejs20/bin:/opt/bin:$PROJECTDIR/bin:$HOME/apps/$APPNAME/env/bin:$PATH
+                export GEM_PATH=/opt/ruby32/usr/lib64/ruby/gems/:$HOME/apps/$APPNAME/env/gems
+                export LD_LIBRARY_PATH=/opt/ruby32/usr/lib64:/opt/ruby32/usr/lib64:/opt/lib
                 export GEM_HOME=$HOME/apps/$APPNAME/env
                 export RAILS_ENV=$RAILS_ENV
                 ''')
