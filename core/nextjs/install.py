@@ -279,7 +279,7 @@ def main():
     run_command(f'source scl_source enable nodejs20 && npx create-next-app@latest next --use-npm --typescript --eslint --tailwind --src-dir --app --import-alias "@/*" --yes', cwd=appdir, shell=True)
 
     # start it
-    cmd = f'{appdir}start'
+    cmd = f'{appdir}/start'
     startit = run_command(cmd)
 
     # finished, push a notice
