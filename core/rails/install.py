@@ -166,7 +166,7 @@ def main():
     doit = run_command(cmd, CMD_ENV, cwd=f'{appdir}/env')
 
     # install rails and puma
-    cmd = f'gem install -N --no-user-install -n {appdir}/env/bin rails puma'
+    cmd = f'scl enable devtoolset-11 -- gem install -N --no-user-install -n {appdir}/env/bin rails puma'
     doit = run_command(cmd, CMD_ENV, cwd=f'{appdir}')
 
     # make rails project
