@@ -94,13 +94,20 @@ def gen_password(length=20):
     chars = string.ascii_letters + string.digits
     return ''.join(secrets.choice(chars) for i in range(length))
 
-def run_command(cmd, cwd=None, env=CMD_ENV):
-    """runs a command, returns output"""
+def run_command(cmd, cwd=None, env=None, shell=False):
+    """Runs a command and returns output."""
     logging.info(f'Running: {cmd}')
+    result = None
     try:
-        result = subprocess.check_output(shlex.split(cmd), cwd=cwd, env=env)
+        if shell:
+            # Directly pass the command as a string when using shell=True
+            result = subprocess.check_output(cmd, shell=True, cwd=cwd, env=env)
+        else:
+            # Use shlex.split for security reasons when shell=False
+            result = subprocess.check_output(shlex.split(cmd), shell=False, cwd=cwd, env=env)
     except subprocess.CalledProcessError as e:
-        logging.debug(e.output)
+        logging.error(f'Error running command: {e.output}')
+        result = e.output
     return result
 
 def add_cronjob(cronjob):
@@ -269,7 +276,7 @@ def main():
                 ''')
     create_file(f'{appdir}/README', readme)
 
-    run_command(f'source scl_source enable nodejs20 && npx create-next-app@latest next --use-npm --typescript --eslint --tailwind --src-dir --app --import-alias "@/*" --yes', cwd=appdir)
+    run_command(f'source scl_source enable nodejs20 && npx create-next-app@latest next --use-npm --typescript --eslint --tailwind --src-dir --app --import-alias "@/*" --yes', cwd=appdir, shell=True)
 
     # start it
     cmd = f'{appdir}start'
