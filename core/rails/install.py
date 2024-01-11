@@ -140,8 +140,10 @@ def main():
     appinfo = api.get(f'/app/read/{args.app_uuid}')
     appdir = f'/home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}'
     # TODO node and ruby paths
-    CMD_ENV = {'PATH': f'/opt/ruby32/usr/bin:/opt/ruby32/usr/bin:/opt/nodejs20/bin:/opt/bin:{appdir}/myproject/bin:{appdir}/env/bin:/usr/local/bin:/usr/bin:/bin',
-            'LD_LIBRARY_PATH': '/opt/ruby32/usr/lib64:/opt/ruby32/usr/lib64:/opt/lib',
+    CMD_ENV = {'PATH': f'/opt/ruby32/bin::/opt/nodejs20/bin:{appdir}/myproject/bin:{appdir}/env/bin:/usr/local/bin:/usr/bin:/bin',
+               'LD_LIBRARY_PATH': '/opt/ruby32/lib',
+               'RUBYLIB': '/opt/ruby32/lib:/opt/ruby32/lib/ruby:/opt/ruby32/lib/ruby/x86_-linux',
+               'PKG_CONFIG_PATH': '/opt/ruby32/lib/pkgconfig',
                'TMPDIR': f'{appdir}/tmp',
                'GEM_HOME': f'{appdir}/env',
                'UMASK': '0002',
