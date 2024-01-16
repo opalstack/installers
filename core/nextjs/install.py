@@ -150,40 +150,6 @@ def main():
     appdir = f'/home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}'
     CMD_ENV['HOME'] = f'/home/{appinfo["osuser_name"]}/'  
 
-    # make myproject/index.js
-    cmd = f'mkdir -p {appdir}/myproject'
-    doit = run_command(cmd)
-    NEWLINE = '\\n'
-    appjs = textwrap.dedent(f'''\
-            const http = require('http');
-
-            const hostname = '127.0.0.1';
-            const port = {appinfo["port"]};
-
-            const server = http.createServer((req, res) => {{
-              res.statusCode = 200;
-              res.setHeader('Content-Type', 'text/plain');
-              res.end('Hello World from Next.js{NEWLINE}');
-            }});
-
-            server.listen(port, hostname, () => {{
-              console.log(`Server running at http://${{hostname}}:${{port}}/`);
-            }});''')
-    create_file(f'{appdir}/myproject/index.js', appjs, perms=0o600)
-
-    # make myproject/index.js
-    pkgjson = textwrap.dedent(f'''\
-            {{
-              "name": "myproject",
-              "version": "1.0.0",
-              "description": "Hello world",
-              "main": "index.js",
-              "scripts": {{
-                "start": "node index.js"
-              }}
-            }}''')
-    create_file(f'{appdir}/myproject/package.json', pkgjson, perms=0o600)
-
     # start script
     start_script = textwrap.dedent(f'''\
                 #!/bin/bash
@@ -196,7 +162,7 @@ def main():
                 NPM=$( which npm )
 
                 # set your project info here
-                PROJECT=next
+                PROJECT=myproject
                 STARTCMD="$NPM start"
 
                 APPDIR=$HOME/apps/$APPNAME
@@ -276,7 +242,7 @@ def main():
                 ''')
     create_file(f'{appdir}/README', readme)
 
-    run_command(f'source scl_source enable nodejs20 && npx create-next-app@latest next --use-npm --typescript --eslint --tailwind --src-dir --app --import-alias "@/*" --yes', cwd=appdir, shell=True)
+    run_command(f'source scl_source enable nodejs20 && npx create-next-app@latest myproject --use-npm --typescript --eslint --tailwind --src-dir --app --import-alias "@/*" --yes', cwd=appdir, shell=True)
 
     # start it
     cmd = f'{appdir}/start'
