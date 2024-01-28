@@ -1,4 +1,4 @@
-#!/usr/bin/python3.6
+#!/usr/local/bin/python3.11
 
 import argparse
 import sys
@@ -19,9 +19,6 @@ import urllib.request
 API_HOST = os.environ.get('API_URL').strip('https://').strip('http://')
 API_BASE_URI = '/api/v1'
 CMD_ENV = {'PATH': '/usr/local/bin:/usr/bin:/bin','UMASK': '0002',}
-LTS_NODE_URL = 'https://nodejs.org/dist/v16.13.1/node-v16.13.1-linux-x64.tar.xz'
-
-
 
 class OpalstackAPITool():
     """simple wrapper for http.client get and post"""
@@ -138,32 +135,26 @@ def main():
     api = OpalstackAPITool(API_HOST, API_BASE_URI, args.opal_token, args.opal_user, args.opal_password)
     appinfo = api.get(f'/app/read/{args.app_uuid}')
     appdir = f'/home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}'
-    CMD_ENV = {'PATH': f'/opt/rh/rh-ruby30/root/usr/local/bin:/opt/rh/rh-ruby30/root/usr/bin:/opt/bin:{appdir}/myproject/bin:{appdir}/env/bin:/usr/local/bin:/usr/bin:/bin',
-            'LD_LIBRARY_PATH': '/opt/rh/rh-ruby30/root/usr/local/lib64:/opt/rh/rh-ruby30/root/usr/lib64:/opt/lib',
+    CMD_ENV = {'PATH': f'{appdir}/myproject/bin:{appdir}/env/bin:/usr/local/bin:/usr/bin:/bin',
                'TMPDIR': f'{appdir}/tmp',
                'GEM_HOME': f'{appdir}/env',
                'UMASK': '0002',
                'HOME': f'/home/{appinfo["osuser_name"]}',}
     # make dirs env and tmp
     os.mkdir(f'{appdir}/env')
+    os.mkdir(f'{appdir}/env/bin')
     os.mkdir(f'{appdir}/tmp')
 
-    # install node into env
-    download(LTS_NODE_URL, f'{appdir}/node.tar.xz')
-    cmd = f'tar xf {appdir}/node.tar.xz --strip 1'
-    doit = run_command(cmd, CMD_ENV, cwd=f'{appdir}/env')
-
-    # install yarn into env
-    download('https://yarnpkg.com/latest.tar.gz', f'{appdir}/tmp/yarn.tar.gz', perms=0o700)
-    cmd = f'tar zxf {appdir}/tmp/yarn.tar.gz --strip 1'
+    # set up yarn
+    cmd = f'scl enable devtoolset-11 nodejs20 ruby32 -- corepack enable --install-directory={appdir}/env/bin'
     doit = run_command(cmd, CMD_ENV, cwd=f'{appdir}/env')
 
     # install rails and puma
-    cmd = f'gem install -N --no-user-install -n {appdir}/env/bin rails puma'
+    cmd = f'scl enable devtoolset-11 nodejs20 ruby32 -- gem install -N --no-user-install -n {appdir}/env/bin rails puma'
     doit = run_command(cmd, CMD_ENV, cwd=f'{appdir}')
 
     # make rails project
-    cmd = f'rails new myproject'
+    cmd = f'scl enable devtoolset-11 nodejs20 ruby32 -- rails new myproject'
     doit = run_command(cmd, CMD_ENV, cwd=f'{appdir}')
     pid_dir = f'{appdir}/myproject/tmp/pids'
     if not os.path.isdir(pid_dir):
@@ -186,12 +177,12 @@ def main():
                 RAILS_ENV=development
 
                 # no need to edit below this line
-                PIDFILE="$PROJECTDIR/tmp/pids/server.pid"
-                export PATH=/opt/rh/rh-ruby30/root/usr/local/bin:/opt/rh/rh-ruby30/root/usr/bin:/opt/bin:$PROJECTDIR/bin:$HOME/apps/$APPNAME/env/bin:$PATH
-                export GEM_PATH=/opt/rh/rh-ruby30/root/usr/share/gems/:$HOME/apps/$APPNAME/env/gems
-                export LD_LIBRARY_PATH=/opt/rh/rh-ruby30/root/usr/local/lib64:/opt/rh/rh-ruby30/root/usr/lib64:/opt/lib
+                source scl_source enable devtoolset-11 nodejs20 ruby32
+                export PATH=$PROJECTDIR/bin:$HOME/apps/$APPNAME/env/bin:$PATH
+                export GEM_PATH=$HOME/apps/$APPNAME/env/gems:$GEM_PATH
                 export GEM_HOME=$HOME/apps/$APPNAME/env
 
+                PIDFILE="$PROJECTDIR/tmp/pids/server.pid"
                 if [ -e "$PIDFILE" ] && (pgrep -u seantest | grep -x -f $PIDFILE &> /dev/null); then
                   echo "$APPNAME puma already running!"
                   exit 99
@@ -358,9 +349,9 @@ def main():
 
                 # no need to edit below this line
                 PIDFILE="$PROJECTDIR/tmp/pids/server.pid"
-                export PATH=/opt/rh/rh-ruby30/root/usr/local/bin:/opt/rh/rh-ruby30/root/usr/bin:/opt/bin:$PROJECTDIR/bin:$HOME/apps/$APPNAME/env/bin:$PATH
-                export GEM_PATH=/opt/rh/rh-ruby30/root/usr/share/gems/:$HOME/apps/$APPNAME/env/gems
-                export LD_LIBRARY_PATH=/opt/rh/rh-ruby30/root/usr/local/lib64:/opt/rh/rh-ruby30/root/usr/lib64:/opt/lib
+                source scl_source enable devtoolset-11 nodejs20 ruby32
+                export PATH=$PROJECTDIR/bin:$HOME/apps/$APPNAME/env/bin:$PATH
+                export GEM_PATH=$HOME/apps/$APPNAME/env/gems:$GEM_PATH
                 export GEM_HOME=$HOME/apps/$APPNAME/env
                 export RAILS_ENV=$RAILS_ENV
                 ''')
@@ -469,5 +460,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
-
