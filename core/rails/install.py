@@ -349,11 +349,11 @@ def main():
 
                 # no need to edit below this line
                 PIDFILE="$PROJECTDIR/tmp/pids/server.pid"
-                source scl_source enable devtoolset-11 nodejs20 ruby32
                 export PATH=$PROJECTDIR/bin:$HOME/apps/$APPNAME/env/bin:$PATH
                 export GEM_PATH=$HOME/apps/$APPNAME/env/gems:$GEM_PATH
                 export GEM_HOME=$HOME/apps/$APPNAME/env
                 export RAILS_ENV=$RAILS_ENV
+                source scl_source enable devtoolset-11 nodejs20 ruby32
                 ''')
     create_file(f'{appdir}/setenv', setenv, perms=0o600)
 
