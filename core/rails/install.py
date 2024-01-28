@@ -177,10 +177,10 @@ def main():
                 RAILS_ENV=development
 
                 # no need to edit below this line
-                source scl_source enable devtoolset-11 nodejs20 ruby32
                 export PATH=$PROJECTDIR/bin:$HOME/apps/$APPNAME/env/bin:$PATH
                 export GEM_PATH=$HOME/apps/$APPNAME/env/gems:$GEM_PATH
                 export GEM_HOME=$HOME/apps/$APPNAME/env
+                source scl_source enable devtoolset-11 nodejs20 ruby32
 
                 PIDFILE="$PROJECTDIR/tmp/pids/server.pid"
                 if [ -e "$PIDFILE" ] && (pgrep -u seantest | grep -x -f $PIDFILE &> /dev/null); then
