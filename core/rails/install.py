@@ -1,4 +1,4 @@
-#!/usr/bin/python3.11
+#!/bin/env python3.11
 
 import argparse
 import sys
