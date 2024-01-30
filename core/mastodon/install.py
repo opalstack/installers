@@ -1,4 +1,4 @@
-#!/usr/bin/python3.6
+#!/usr/local/bin/python3.11
 
 import argparse
 import http.client
@@ -23,8 +23,8 @@ CMD_ENV = {
     "PATH": "/usr/local/bin:/usr/bin:/bin",
     "UMASK": "0002",
 }
-LTS_NODE_URL = "https://nodejs.org/download/release/v16.20.2/node-v16.20.2-linux-x64.tar.xz"
-MASTODON_VERSION = "4.2.1"
+CMD_PREFIX = '/bin/scl enable devtoolset-11 nodejs20 ruby32 rh-redis5 -- '
+MASTODON_VERSION = "4.2.4"
 
 
 class OpalstackAPITool:
@@ -74,13 +74,15 @@ class OpalstackAPITool:
 def run_command(cmd, env, cwd=None, use_shlex=True):
     """runs a command, returns output"""
     logging.info(f"Running: {cmd}")
+    # add scl env to commands
+    cmd = CMD_PREFIX + cmd
     try:
         if use_shlex:
             cmd = shlex.split(cmd)
         result = subprocess.check_output(cmd, cwd=cwd, env=env)
+        return result
     except subprocess.CalledProcessError as e:
         logging.debug(e.output)
-    return result
 
 
 def create_file(path, contents, writemode="w", perms=0o600):
@@ -177,8 +179,8 @@ def main():
     appdir = f'/home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}'
     CMD_ENV = {
         "RAILS_ENV": "production",
-        "PATH": f"{appdir}/node/bin:{appdir}/mastodon/bin:/opt/rh/rh-ruby30/root/usr/local/bin:/opt/rh/rh-ruby30/root/usr/bin:/opt/bin:/usr/local/bin:/usr/bin:/bin:/usr/pgsql-11/bin/",
-        "LD_LIBRARY_PATH": f"{appdir}/mastodon/lib:/opt/rh/rh-ruby30/root/usr/local/lib64:/opt/rh/rh-ruby30/root/usr/lib64:/opt/lib",
+        "PATH": f"{appdir}/node/bin:{appdir}/mastodon/bin:/usr/local/bin:/usr/bin:/bin:/usr/pgsql-11/bin/",
+        "LD_LIBRARY_PATH": f"{appdir}/mastodon/lib",
         "TMPDIR": f"{appdir}/tmp",
         "GEM_HOME": f"{appdir}/mastodon",
         "UMASK": "0002",
@@ -259,7 +261,7 @@ def main():
                 sys.exit()
 
     # install mastodon
-    cmd = f"git clone https://github.com/tootsuite/mastodon.git mastodon"
+    cmd = f"git clone https://github.com/mastodon/mastodon.git mastodon"
     doit = run_command(cmd, CMD_ENV, cwd=f"{appdir}")
     cmd = f"git checkout -f v{MASTODON_VERSION}"
     doit = run_command(cmd, CMD_ENV, cwd=f"{appdir}/mastodon")
@@ -282,18 +284,11 @@ def main():
     if not os.path.isdir(nginx_dir):
         os.mkdir(nginx_dir)
 
-    # install nodejs
-    cmd = f'mkdir -p {appdir}/node'
-    doit = run_command(cmd, CMD_ENV)
-    download(LTS_NODE_URL, f'{appdir}/node.tar.xz')
-    cmd = f'tar xf {appdir}/node.tar.xz --strip 1'
-    doit = run_command(cmd, CMD_ENV, cwd=f'{appdir}/node')
-    cmd = f"rm -rf {appdir}/node.tar.xz"
-    doit = run_command(cmd, CMD_ENV)
-
     # set up yarn
-    cmd = "corepack enable"
+    cmd = f'mkdir -p {appdir}/node/bin'
     doit = run_command(cmd, CMD_ENV)
+    cmd = f'corepack enable --install-directory={appdir}/node/bin'
+    doit = run_command(cmd, CMD_ENV, cwd=f'{appdir}/node')
     cmd = "yarn set version classic"
     doit = run_command(cmd, CMD_ENV)
 
@@ -476,10 +471,6 @@ def main():
                 logfile_backups=10
                 loglevel=info
                 pidfile=/home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}/mastodon/tmp/pids/supervisord.pid
-                environment=
-                    RAILS_ENV="production",
-                    PATH="/home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}/node/bin:/opt/rh/rh-redis5/root/usr/bin:/opt/rh/rh-redis5/root/usr/sbin:/opt/rh/rh-ruby30/root/usr/local/bin:/opt/rh/rh-ruby30/root/usr/bin:/home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}/mastodon/bin:/usr/local/bin:/bin:/usr/bin:/usr/local/sbin:/usr/sbin:/opt/puppetlabs/bin:/home/{appinfo["osuser_name"]}/.local/bin:/home/{appinfo["osuser_name"]}/bin",
-                    LD_LIBRARY_PATH="/opt/rh/rh-redis5/root/usr/lib64:/opt/rh/rh-ruby30/root/usr/local/lib64:/opt/rh/rh-ruby30/root/usr/lib64",
 
                 [rpcinterface:supervisor]
                 supervisor.rpcinterface_factory = supervisor.rpcinterface:make_main_rpcinterface
@@ -489,13 +480,14 @@ def main():
 
                 [program:redis]
                 directory=/home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}/mastodon
-                command=/opt/rh/rh-redis5/root/bin/redis-server /home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}/mastodon/redis.conf
+                command=redis-server /home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}/mastodon/redis.conf
                 stdout_logfile=/home/{appinfo["osuser_name"]}/logs/apps/{appinfo["name"]}/redis.log
                 stderr_logfile=/home/{appinfo["osuser_name"]}/logs/apps/{appinfo["name"]}/redis.log
 
                 [program:puma]
                 directory=/home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}/mastodon
                 environment=
+                    RAILS_ENV=production,
                     SOCKET=/home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}/mastodon/tmp/sockets/puma.sock
                 command=bundle exec puma -C /home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}/mastodon/config/puma.rb --pidfile /home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}/mastodon/tmp/pids/puma.pid
                 stdout_logfile=/home/{appinfo["osuser_name"]}/logs/apps/{appinfo["name"]}/puma.log
@@ -539,7 +531,12 @@ def main():
                 # change the next line to your Mastodon project directory
                 PROJECTDIR=$HOME/apps/$APPNAME/mastodon
 
+                # set the rails env
+                RAILS_ENV=production
+
                 # no need to edit below this line
+                export PATH=$HOME/apps/$APPNAME/node/bin:$PROJECTDIR/bin:$PATH
+                source scl_source enable devtoolset-11 nodejs20 ruby32 rh-redis5
                 PIDFILE="$PROJECTDIR/tmp/pids/supervisord.pid"
 
                 # clean up streaming socket if node isn't running
@@ -597,11 +594,11 @@ def main():
                 RAILS_ENV=production
 
                 # no need to edit below this line
-                export PATH=/home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}/node/bin:/opt/rh/rh-redis5/root/usr/bin:/opt/rh/rh-redis5/root/usr/sbin:/opt/rh/rh-ruby30/root/usr/local/bin:/opt/rh/rh-ruby30/root/usr/bin:/home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}/mastodon/bin:/usr/local/bin:/bin:/usr/bin:/usr/local/sbin:/usr/sbin:/opt/puppetlabs/bin:/usr/pgsql-11/bin/:/home/{appinfo["osuser_name"]}/.local/bin:/home/{appinfo["osuser_name"]}/bin:$PATH
-                export LD_LIBRARY_PATH=/opt/rh/rh-redis5/root/usr/lib64:/opt/rh/rh-ruby30/root/usr/local/lib64:/opt/rh/rh-ruby30/root/usr/lib64
-                export GEM_PATH=/opt/rh/rh-ruby30/root/usr/share/gems/:$HOME/apps/$APPNAME/mastodon/vendor/bundle/ruby/3.0.0/gems
+                export PATH=$HOME/apps/$APPNAME/node/bin:$HOME/apps/$APPNAME/mastodon/bin:/usr/local/bin:/bin:/usr/bin:/usr/local/sbin:/usr/sbin:/opt/puppetlabs/bin:/usr/pgsql-11/bin/:$HOME/.local/bin:$HOME/bin:$PATH
+                export GEM_PATH=$HOME/apps/$APPNAME/mastodon/vendor/bundle/ruby/gems
                 export GEM_HOME=$HOME/apps/$APPNAME/mastodon/
                 export RAILS_ENV=$RAILS_ENV
+                source scl_source enable devtoolset-11 nodejs20 ruby32 rh-redis5
                 """
     )
     create_file(f"{appdir}/setenv", setenv, perms=0o600)
@@ -800,9 +797,9 @@ def main():
     create_file(f"{appdir}/change_domain.py", change_domain, perms=0o775)
 
     # populate database
-    cmd = f"rails db:schema:load"
+    cmd = f"bundle exec rails db:schema:load"
     doit = run_command(cmd, CMD_ENV, cwd=f"{appdir}/mastodon")
-    cmd = f"rails db:seed"
+    cmd = f"bundle exec rails db:seed"
     doit = run_command(cmd, CMD_ENV, cwd=f"{appdir}/mastodon")
 
     # precomile assets
@@ -810,31 +807,11 @@ def main():
     doit = run_command(cmd, CMD_ENV, cwd=f"{appdir}/mastodon")
 
     # generate_vapid_key
-    cmd1 = "bin/rake mastodon:webpush:generate_vapid_key "
-    cmd2 = " >> "
-    cmd3 = ".env.production"
-    cmds = cmd1 + cmd2 + cmd3
-    cmd = shlex.split(sh)
-    cmd.append(cmds)
-    doit = run_command(cmd, CMD_ENV, cwd=f"{appdir}/mastodon/", use_shlex=False)
-
-    # downgrade uri version to avoid errors in bundle commands
-    gemfile = textwrap.dedent(
-        f"""\
-            
-                # Needed to avoid this error with bundle commands:
-                # You have already activated uri 0.10.1, but your Gemfile 
-                # requires uri 0.12.2. Since uri is a default gem, you can 
-                # either remove your dependency on it or try updating to a 
-                # newer version of bundler that supports uri as a default gem.
-                gem 'uri', '0.10.1'
-                """
-    )
-    append_file(f"{appdir}/mastodon/Gemfile", gemfile)
-    cmd = "bundle config unset deployment"
-    doit = run_command(cmd, CMD_ENV, cwd=f"{appdir}/mastodon/")
-    cmd = "bundle update uri"
-    doit = run_command(cmd, CMD_ENV, cwd=f"{appdir}/mastodon/")
+    cmd = 'bundle exec rake mastodon:webpush:generate_vapid_key'
+    vapid_keys = run_command(cmd, CMD_ENV, cwd=f"{appdir}/mastodon/")
+    conf = open(f'{appdir}/mastodon/.env.production', 'a')
+    conf.write(vapid_keys.decode())
+    conf.close()
 
     # install supervisord
     cmd = f"pip3.11 install --target={appdir}/mastodon/bin/ supervisor"
@@ -892,11 +869,12 @@ def main():
     create_file(f"{appdir}/README", readme)
 
     # finished, push a notice
-    msg = f"See README in app directory for more info."
     payload = json.dumps([{"id": args.app_uuid}])
     finished = api.post("/app/installed/", payload)
-
-    logging.info(f"Completed installation of Mastodon app {args.app_name}")
+    msg = f'Installation of Mastodon app {appinfo["name"]} is complete. See README in the app directory on your server for mandatory configuration steps.'
+    payload = json.dumps([{"type": "M", "content": msg}])
+    notice = api.post("/notice/create/", payload)
+    logging.info(msg)
 
 
 if __name__ == "__main__":
