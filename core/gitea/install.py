@@ -16,7 +16,7 @@ from urllib.parse import urlparse
 
 API_HOST = os.environ.get('API_URL').strip('https://').strip('http://')
 API_BASE_URI = '/api/v1'
-GITEA_URL = 'https://github.com/go-gitea/gitea/releases/download/v1.21.1/gitea-1.21.1-linux-amd64'
+GITEA_URL = 'https://github.com/go-gitea/gitea/releases/download/v1.21.5/gitea-1.21.5-linux-amd64'
 CMD_ENV = {'PATH': '/usr/local/bin:/usr/bin:/bin','UMASK': '0002',}
 
 
