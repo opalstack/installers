@@ -587,7 +587,7 @@ def main():
                 # name of your app, don't change this
                 APPNAME={appinfo["name"]}
 
-                # change the next line to your Rails project directory
+                # change the next line to your Mastodon checkout  directory
                 PROJECTDIR=$HOME/apps/$APPNAME/mastodon
 
                 # set your rails env, eg development or production
