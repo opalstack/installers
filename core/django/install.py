@@ -162,13 +162,13 @@ def main():
     logging.info(f'Created virtualenv at {appdir}/env')
 
     # install uwsgi
-    cmd = f'{appdir}/env/bin/pip install uwsgi'
+    cmd = f'scl enable devtoolset-11 -- {appdir}/env/bin/pip install uwsgi'
     doit = run_command(cmd)
     perms = run_command(f'chmod 700 {appdir}/env/bin/uwsgi')
     logging.info('Installed latest uWSGI into virtualenv')
 
     # install django
-    cmd = f'{appdir}/env/bin/pip install django==4.1.8'
+    cmd = f'scl enable devtoolset-11 -- {appdir}/env/bin/pip install django==4.1.8'
     doit = run_command(cmd)
     logging.info('Installed latest Django into virtualenv')
 
