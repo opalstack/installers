@@ -59,7 +59,7 @@ source /home/$USER/apps/$APPNAME/env/bin/activate
 pip install -U pip
 
 # install latest LTS release
-pip install https://projects.unbit.it/downloads/uwsgi-lts.tar.gz
+scl enable devtoolset-11 -- pip install uwsgi
 chmod +x /home/$USER/apps/$APPNAME/env/bin/uwsgi
 
 export PORT
