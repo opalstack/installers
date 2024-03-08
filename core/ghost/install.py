@@ -151,7 +151,7 @@ def main():
     # install ghostcli
     cmd = f'mkdir -p {appdir}/node'
     doit = run_command(cmd)
-    cmd = 'scl enable devtoolset-11 nodejs18 -- npm install ghost-cli@latest'
+    cmd = f'scl enable devtoolset-11 nodejs18 -- npm install ghost-cli@latest --prefix={appdir}/node/'
     doit = run_command(cmd, cwd=f'{appdir}/node/')
     cmd = 'ln -s node_modules/.bin bin'
     doit = run_command(cmd, cwd=f'{appdir}/node/')
