@@ -1,4 +1,4 @@
-#! /usr/bin/python3.6
+#!/usr/local/bin/python3.11
 
 import argparse
 import sys
@@ -17,7 +17,6 @@ from urllib.parse import urlparse
 API_HOST = os.environ.get('API_URL').strip('https://').strip('http://')
 API_BASE_URI = '/api/v1'
 CMD_ENV = {'PATH': '/usr/local/bin:/usr/bin:/bin','UMASK': '0002',}
-LTS_NODE_URL = 'https://nodejs.org/download/release/v14.17.0/node-v14.17.0-linux-x64.tar.xz'
 
 
 class OpalstackAPITool():
@@ -123,7 +122,6 @@ def add_cronjob(cronjob):
     logging.info(f'Added cron job: {cronjob}')
 
 
-
 def main():
     """run it"""
     # grab args from cmd or env
@@ -150,44 +148,50 @@ def main():
     appinfo = api.get(f'/app/read/{args.app_uuid}')
     appdir = f'/home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}'
 
-    # get current LTS nodejs
+    # install ghostcli
     cmd = f'mkdir -p {appdir}/node'
     doit = run_command(cmd)
-    download(LTS_NODE_URL, f'{appdir}/node.tar.xz')
-    cmd = f'tar xf {appdir}/node.tar.xz --strip 1'
-    doit = run_command(cmd, cwd=f'{appdir}/node')
-    CMD_ENV['PATH'] = f'{appdir}/node/bin:{CMD_ENV["PATH"]}'
-
-    # install ghostcli
-    # TODO: remove sleep after race is figured out
-    cmd = f'sleep 10'
-    doit = run_command(cmd, cwd=appdir)
-    cmd = f'npm install --prefix={appdir} @vscode/sqlite3'
-    doit = run_command(cmd, cwd=appdir)
-    cmd = f'npm install --prefix={appdir} ghost-cli@latest'
-    doit = run_command(cmd, cwd=appdir)
+    cmd = 'scl enable devtoolset-11 nodejs18 -- npm install ghost-cli@latest'
+    doit = run_command(cmd, cwd=f'{appdir}/node/')
+    cmd = 'ln -s node_modules/.bin bin'
+    doit = run_command(cmd, cwd=f'{appdir}/node/')
 
     # install ghost instance
     cmd = f'mkdir {appdir}/ghost'
     doit = run_command(cmd)
-    cmd = f'{appdir}/node_modules/.bin/ghost install local --port {appinfo["port"]} --log file --no-start'
+    CMD_ENV['NPM_CONFIG_BUILD_FROM_SOURCE'] = 'true'
+    CMD_ENV['NODE_GYP_FORCE_PYTHON'] = '/usr/local/bin/python3.11'
+    cmd = f'scl enable devtoolset-11 nodejs18 -- {appdir}/node/bin/ghost install local --port {appinfo["port"]} --log file --no-start --db sqlite3'
     doit = run_command(cmd, cwd=f'{appdir}/ghost')
 
-    # fix sqlite stuff (FIXME later)
-    cmd = f'rm -r {appdir}/ghost/current/node_modules/sqlite3'
-    doit = run_command(cmd, cwd=appdir)
-    cmd = f'cp -r {appdir}/node_modules/@vscode/sqlite3 {appdir}/ghost/current/node_modules/'
-    doit = run_command(cmd, cwd=appdir)
-
-    # update ghost config to put logs in log dir
-    cmd = f'{appdir}/node_modules/.bin/ghost config set logging[\'path\'] \'/home/{appinfo["osuser_name"]}/logs/apps/{appinfo["name"]}/\''
+    # configure log dir
+    cmd = f'scl enable devtoolset-11 nodejs18 -- {appdir}/node/bin/ghost config set logging[\'path\'] \'/home/{appinfo["osuser_name"]}/logs/apps/{appinfo["name"]}/\''
     doit = run_command(cmd, cwd=f'{appdir}/ghost')
+
+    # configure mail transport
+    cmd = f'scl enable devtoolset-11 nodejs18 -- {appdir}/node/bin/ghost config set mail[\'transport\'] sendmail'
+    doit = run_command(cmd, cwd=f'{appdir}/ghost')
+
+    # set instance name in ghost cli
+    with open(f'{appdir}/ghost/.ghost-cli') as gconfig:
+        gcdata = json.loads(gconfig.read())
+    gcdata['name'] = args.app_name
+    with open(f'{appdir}/ghost/.ghost-cli', 'w') as gconfig:
+        doit = gconfig.write(json.dumps(gcdata))
+
+    # setenv script
+    setenv = textwrap.dedent(f'''\
+                #!/bin/bash
+                source /opt/rh/devtoolset-11/enable
+                source /opt/nodejs18/enable
+                PATH="$( cd "$( dirname "${{BASH_SOURCE[0]}}" )" && pwd )"/node/bin:$PATH
+            ''')
+    create_file(f'{appdir}/setenv', setenv, perms=0o600)
 
     # start script
     start_script = textwrap.dedent(f'''\
                 #!/bin/bash
-                PATH={appdir}/node/bin:$PATH
-                {appdir}/node_modules/.bin/ghost start -d {appdir}/ghost --no-setup-linux-user
+                PATH={appdir}/node/bin:$PATH scl enable devtoolset-11 nodejs18 -- ghost start -d {appdir}/ghost
                 echo "Started Ghost for {appinfo["name"]}."
                 ''')
     create_file(f'{appdir}/start', start_script, perms=0o700)
@@ -195,8 +199,7 @@ def main():
     # stop script
     stop_script = textwrap.dedent(f'''\
                 #!/bin/bash
-                PATH={appdir}/node/bin:$PATH
-                {appdir}/node_modules/.bin/ghost stop -d {appdir}/ghost --no-setup-linux-user
+                PATH={appdir}/node/bin:$PATH scl enable devtoolset-11 nodejs18 -- ghost stop -d {appdir}/ghost
                 echo "Stopped Ghost for {appinfo["name"]}."
                 ''')
     create_file(f'{appdir}/stop', stop_script, perms=0o700)
@@ -212,16 +215,17 @@ def main():
 
                 ## Post-Install Steps - IMPORTANT!
 
-                1. Assign your {args.app_name} application to a Site Route in
+                1. Assign your {args.app_name} application to a site in
                    your control panel and make a note of the site URL.
 
                 2. SSH to the server as your app's shell user and run the
                    following commands to configure the site URL, for example
                    https://domain.com:
 
+                    source {appdir}/setenv
                     cd {appdir}/ghost
-                    {appdir}/node_modules/.bin/ghost config url https://domain.com
-                    {appdir}/node_modules/.bin/ghost restart
+                    ghost config url https://domain.com
+                    ghost restart
 
                 3. Immediately visit your Ghost admin URL (for example
                    https://domain.com/ghost/) to set up your initial admin user.
@@ -231,42 +235,30 @@ def main():
                 Your Ghost app is initially configured to run in development
                 mode which uses more memory and is slower than production mode.
                 To run in production mode please see:
-                https://help.opalstack.com/article/122/running-ghost-in-production-mode
-
+                https://docs.opalstack.com/topic-guides/ghost/#running-ghost-in-production-mode
 
                 ## Controlling your app
 
-                B
                 Start your app by running:
 
                     {appdir}/start
-
-                or
-
-                    {appdir}/node_modules/.bin/ghost start -d {appdir}/ghost
-
-
 
                 Stop your app by running:
 
                    {appdir}/stop
 
-                or
+                ## Ghost shell environment
 
-                   {appdir}/node_modules/.bin/ghost stop -d {appdir}/ghost
+                Your Ghost app runs with non-default system software. You can
+                configure your shell environment to use the same software by
+                running:
 
-                ## Installing modules
-
-                If you want to install Node modules in your app directory:
-
-                    cd {appdir}
-                    npm install modulename
-
+                    source {appdir}/setenv
                 ''')
     create_file(f'{appdir}/README', readme)
 
     # restart it
-    cmd = f'{appdir}/node_modules/.bin/ghost restart'
+    cmd = f'scl enable devtoolset-11 nodejs18 -- {appdir}/node/bin/ghost restart'
     doit = run_command(cmd, cwd=f'{appdir}/ghost')
 
     # finished, push a notice
@@ -275,7 +267,6 @@ def main():
     finished=api.post('/app/installed/', payload)
 
     logging.info(f'Completed installation of Ghost app {args.app_name}')
-
 
 if __name__ == '__main__':
     main()
