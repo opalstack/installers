@@ -16,8 +16,11 @@ from urllib.parse import urlparse
 
 API_HOST = os.environ.get('API_URL').strip('https://').strip('http://')
 API_BASE_URI = '/api/v1'
-GITEA_URL = 'https://github.com/go-gitea/gitea/releases/download/v1.21.7/gitea-1.21.7-linux-amd64'
-CMD_ENV = {'PATH': '/usr/local/bin:/usr/bin:/bin','UMASK': '0002',}
+
+GITEA_VERSION = '1.21.8'
+GITEA_URL = f'https://github.com/go-gitea/gitea/releases/download/v{GITEA_VERSION}/gitea-{GITEA_VERSION}-linux-amd64'
+
+CMD_ENV = {'PATH': '/usr/local/bin:/usr/bin:/bin', 'UMASK': '0002'}
 
 
 class OpalstackAPITool():
