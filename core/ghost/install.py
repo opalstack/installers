@@ -185,6 +185,7 @@ def main():
                 source /opt/rh/devtoolset-11/enable
                 source /opt/nodejs18/enable
                 PATH="$( cd "$( dirname "${{BASH_SOURCE[0]}}" )" && pwd )"/node/bin:$PATH
+                NPM_CONFIG_BUILD_FROM_SOURCE=true
             ''')
     create_file(f'{appdir}/setenv', setenv, perms=0o600)
 
