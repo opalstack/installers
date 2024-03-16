@@ -185,6 +185,7 @@ def main():
                 source /opt/rh/devtoolset-11/enable
                 source /opt/nodejs18/enable
                 export NPM_CONFIG_BUILD_FROM_SOURCE=true
+                export /NODE_GYP_FORCE_PYTHON=/usr/local/bin/python3.11
                 PATH="$( cd "$( dirname "${{BASH_SOURCE[0]}}" )" && pwd )"/node/bin:$PATH
             ''')
     create_file(f'{appdir}/setenv', setenv, perms=0o600)
