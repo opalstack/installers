@@ -24,7 +24,7 @@ CMD_ENV = {
     "UMASK": "0002",
 }
 CMD_PREFIX = '/bin/scl enable devtoolset-11 nodejs20 ruby32 rh-redis5 -- '
-MASTODON_VERSION = "4.2.5"
+MASTODON_VERSION = "4.2.7"
 
 
 class OpalstackAPITool:
