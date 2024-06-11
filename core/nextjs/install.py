@@ -179,7 +179,7 @@ def main():
                 fi
 
                 cd $PROJECTDIR
-                $PROJECTDIR/node_modules/.bin/next --port {appinfo["port"]} > $LOGDIR/logfile.log 2>&1 & echo $! > $PIDFILE
+                $PROJECTDIR/node_modules/.bin/next start --port {appinfo["port"]} > $LOGDIR/logfile.log 2>&1 & echo $! > $PIDFILE
 
                 echo "Started $APPNAME."
                 ''')
