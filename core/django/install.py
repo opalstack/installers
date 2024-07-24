@@ -157,7 +157,8 @@ def main():
     CMD_ENV['TMPDIR'] = f'{appdir}/tmp'
 
     # create virtualenv
-    cmd = f'/usr/local/bin/python3.10 -m venv {appdir}/env'
+    python_executable_path = run_command('which python3.11')
+    cmd = f'{python_executable_path} -m venv {appdir}/env'
     doit = run_command(cmd)
     logging.info(f'Created virtualenv at {appdir}/env')
 
