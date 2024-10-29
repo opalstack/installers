@@ -157,19 +157,19 @@ def main():
     CMD_ENV['TMPDIR'] = f'{appdir}/tmp'
 
     # create virtualenv
-    python_executable_path = run_command('which python3.10').decode('utf-8').strip()
+    python_executable_path = run_command('which python3.12').decode('utf-8').strip()
     cmd = f'{python_executable_path} -m venv {appdir}/env'
     doit = run_command(cmd)
     logging.info(f'Created virtualenv at {appdir}/env')
 
     # install uwsgi
-    cmd = f'scl enable devtoolset-11 -- {appdir}/env/bin/pip install uwsgi'
+    cmd = f'{appdir}/env/bin/pip install uwsgi'
     doit = run_command(cmd)
     perms = run_command(f'chmod 700 {appdir}/env/bin/uwsgi')
     logging.info('Installed latest uWSGI into virtualenv')
 
     # install django
-    cmd = f'scl enable devtoolset-11 -- {appdir}/env/bin/pip install django==4.1.8'
+    cmd = f'{appdir}/env/bin/pip install django==4.1.8'
     doit = run_command(cmd)
     logging.info('Installed latest Django into virtualenv')
 
