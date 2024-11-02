@@ -1,4 +1,4 @@
-#!/usr/local/bin/python3.11
+#! /bin/python3
 
 import argparse
 import sys
@@ -151,7 +151,7 @@ def main():
     # install ghostcli
     cmd = f'mkdir -p {appdir}/node'
     doit = run_command(cmd)
-    cmd = f'scl enable devtoolset-11 nodejs18 -- npm install ghost-cli@latest --prefix={appdir}/node/'
+    cmd = f'npm install ghost-cli@latest --prefix={appdir}/node/'
     doit = run_command(cmd, cwd=f'{appdir}/node/')
     cmd = 'ln -s node_modules/.bin bin'
     doit = run_command(cmd, cwd=f'{appdir}/node/')
@@ -161,15 +161,15 @@ def main():
     doit = run_command(cmd)
     CMD_ENV['NPM_CONFIG_BUILD_FROM_SOURCE'] = 'true'
     CMD_ENV['NODE_GYP_FORCE_PYTHON'] = '/usr/local/bin/python3.11'
-    cmd = f'scl enable devtoolset-11 nodejs18 -- {appdir}/node/bin/ghost install local --port {appinfo["port"]} --log file --no-start --db sqlite3'
+    cmd = f'{appdir}/node/bin/ghost install local --port {appinfo["port"]} --log file --no-start --db sqlite3'
     doit = run_command(cmd, cwd=f'{appdir}/ghost')
 
     # configure log dir
-    cmd = f'scl enable devtoolset-11 nodejs18 -- {appdir}/node/bin/ghost config set logging[\'path\'] \'/home/{appinfo["osuser_name"]}/logs/apps/{appinfo["name"]}/\''
+    cmd = f'{appdir}/node/bin/ghost config set logging[\'path\'] \'/home/{appinfo["osuser_name"]}/logs/apps/{appinfo["name"]}/\''
     doit = run_command(cmd, cwd=f'{appdir}/ghost')
 
     # configure mail transport
-    cmd = f'scl enable devtoolset-11 nodejs18 -- {appdir}/node/bin/ghost config set mail[\'transport\'] sendmail'
+    cmd = f'{appdir}/node/bin/ghost config set mail[\'transport\'] sendmail'
     doit = run_command(cmd, cwd=f'{appdir}/ghost')
 
     # set instance name in ghost cli
@@ -193,7 +193,7 @@ def main():
     # start script
     start_script = textwrap.dedent(f'''\
                 #!/bin/bash
-                PATH={appdir}/node/bin:$PATH scl enable devtoolset-11 nodejs18 -- ghost start -d {appdir}/ghost
+                PATH={appdir}/node/bin:$PATH ghost start -d {appdir}/ghost
                 echo "Started Ghost for {appinfo["name"]}."
                 ''')
     create_file(f'{appdir}/start', start_script, perms=0o700)
@@ -201,7 +201,7 @@ def main():
     # stop script
     stop_script = textwrap.dedent(f'''\
                 #!/bin/bash
-                PATH={appdir}/node/bin:$PATH scl enable devtoolset-11 nodejs18 -- ghost stop -d {appdir}/ghost
+                PATH={appdir}/node/bin:$PATH ghost stop -d {appdir}/ghost
                 echo "Stopped Ghost for {appinfo["name"]}."
                 ''')
     create_file(f'{appdir}/stop', stop_script, perms=0o700)
@@ -260,7 +260,7 @@ def main():
     create_file(f'{appdir}/README', readme)
 
     # restart it
-    cmd = f'scl enable devtoolset-11 nodejs18 -- {appdir}/node/bin/ghost restart'
+    cmd = f'{appdir}/node/bin/ghost restart'
     doit = run_command(cmd, cwd=f'{appdir}/ghost')
 
     # finished, push a notice
