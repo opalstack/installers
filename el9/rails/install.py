@@ -146,15 +146,15 @@ def main():
     os.mkdir(f'{appdir}/tmp')
 
     # set up yarn
-    cmd = f'scl enable devtoolset-11 nodejs20 ruby32 -- corepack enable --install-directory={appdir}/env/bin'
+    cmd = f'scl enable ruby33 -- corepack enable --install-directory={appdir}/env/bin'
     doit = run_command(cmd, CMD_ENV, cwd=f'{appdir}/env')
 
     # install rails and puma
-    cmd = f'scl enable devtoolset-11 nodejs20 ruby32 -- gem install -N --no-user-install -n {appdir}/env/bin rails puma'
+    cmd = f'scl enable ruby33 -- gem install -N --no-user-install -n {appdir}/env/bin rails puma'
     doit = run_command(cmd, CMD_ENV, cwd=f'{appdir}')
 
     # make rails project
-    cmd = f'scl enable devtoolset-11 nodejs20 ruby32 -- rails new myproject'
+    cmd = f'scl enable ruby33 -- rails new myproject'
     doit = run_command(cmd, CMD_ENV, cwd=f'{appdir}')
     pid_dir = f'{appdir}/myproject/tmp/pids'
     if not os.path.isdir(pid_dir):
@@ -180,7 +180,7 @@ def main():
                 export PATH=$PROJECTDIR/bin:$HOME/apps/$APPNAME/env/bin:$PATH
                 export GEM_PATH=$HOME/apps/$APPNAME/env/gems:$GEM_PATH
                 export GEM_HOME=$HOME/apps/$APPNAME/env
-                source scl_source enable devtoolset-11 nodejs20 ruby32
+                source scl_source enable ruby33
 
                 PIDFILE="$PROJECTDIR/tmp/pids/server.pid"
                 if [ -e "$PIDFILE" ] && (pgrep -u seantest | grep -x -f $PIDFILE &> /dev/null); then
@@ -353,7 +353,7 @@ def main():
                 export GEM_PATH=$HOME/apps/$APPNAME/env/gems:$GEM_PATH
                 export GEM_HOME=$HOME/apps/$APPNAME/env
                 export RAILS_ENV=$RAILS_ENV
-                source scl_source enable devtoolset-11 nodejs20 ruby32
+                source scl_source enable ruby33
                 ''')
     create_file(f'{appdir}/setenv', setenv, perms=0o600)
 
