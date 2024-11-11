@@ -160,7 +160,7 @@ def main():
     cmd = f'mkdir {appdir}/ghost'
     doit = run_command(cmd)
     CMD_ENV['NPM_CONFIG_BUILD_FROM_SOURCE'] = 'true'
-    CMD_ENV['NODE_GYP_FORCE_PYTHON'] = '/usr/local/bin/python3.11'
+    CMD_ENV['NODE_GYP_FORCE_PYTHON'] = '/usr/local/bin/python3.12'
     cmd = f'scl enable nodejs20 -- {appdir}/node/bin/ghost install local --port {appinfo["port"]} --log file --no-start --db sqlite3'
     doit = run_command(cmd, cwd=f'{appdir}/ghost')
 
@@ -182,10 +182,9 @@ def main():
     # setenv script
     setenv = textwrap.dedent(f'''\
                 #!/bin/bash
-                source /opt/rh/devtoolset-11/enable
-                source /opt/nodejs18/enable
-                export NPM_CONFIG_BUILD_FROM_SOURCE=true
-                export NODE_GYP_FORCE_PYTHON=/usr/local/bin/python3.11
+                source /opt/nodejs20/enable
+                #export NPM_CONFIG_BUILD_FROM_SOURCE=true
+                export NODE_GYP_FORCE_PYTHON=/usr/local/bin/python3.12
                 PATH="$( cd "$( dirname "${{BASH_SOURCE[0]}}" )" && pwd )"/node/bin:$PATH
             ''')
     create_file(f'{appdir}/setenv', setenv, perms=0o600)
