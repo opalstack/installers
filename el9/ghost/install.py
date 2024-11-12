@@ -183,7 +183,7 @@ def main():
     setenv = textwrap.dedent(f'''\
                 #!/bin/bash
                 source /opt/nodejs20/enable
-                #export NPM_CONFIG_BUILD_FROM_SOURCE=true
+                export NPM_CONFIG_BUILD_FROM_SOURCE=true
                 export NODE_GYP_FORCE_PYTHON=/usr/local/bin/python3.12
                 PATH="$( cd "$( dirname "${{BASH_SOURCE[0]}}" )" && pwd )"/node/bin:$PATH
             ''')
