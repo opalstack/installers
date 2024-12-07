@@ -137,28 +137,20 @@ def main():
     appdir = f'/home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}'
     CMD_ENV = {'PATH': f'{appdir}/myproject/bin:{appdir}/env/bin:/usr/local/bin:/usr/bin:/bin',
                'TMPDIR': f'{appdir}/tmp',
-               'GEM_HOME': f'{appdir}/env',
+               'GEM_HOME': f'{appdir}/tmp',
                'UMASK': '0002',
                'HOME': f'/home/{appinfo["osuser_name"]}',}
-    # make dirs env and tmp
-    os.mkdir(f'{appdir}/env')
-    os.mkdir(f'{appdir}/env/bin')
     os.mkdir(f'{appdir}/tmp')
 
-    # set up yarn
-    cmd = f'scl enable ruby33 -- corepack enable --install-directory={appdir}/env/bin'
-    doit = run_command(cmd, CMD_ENV, cwd=f'{appdir}/env')
-
-    # install rails and puma
-    cmd = f'scl enable ruby33 -- gem install -N --no-user-install -n {appdir}/env/bin rails puma'
-    doit = run_command(cmd, CMD_ENV, cwd=f'{appdir}')
-
     # make rails project
-    cmd = f'scl enable ruby33 -- rails new myproject'
+    cmd = f'scl enable ruby33 -- gem exec rails new myproject'
     doit = run_command(cmd, CMD_ENV, cwd=f'{appdir}')
-    pid_dir = f'{appdir}/myproject/tmp/pids'
-    if not os.path.isdir(pid_dir):
-        os.mkdir(pid_dir)
+    cmd = f'scl enable ruby33 -- bundle config set deployment true'
+    doit = run_command(cmd, CMD_ENV, cwd=f'{appdir}/myproject')
+    cmd = f'scl enable ruby33 -- bundle install'
+    doit = run_command(cmd, CMD_ENV, cwd=f'{appdir}/myproject')
+    cmd = f'rm -rf {appdir}/tmp/gem_exec'
+    doit = run_command(cmd, CMD_ENV, cwd=f'{appdir}/myproject')
     socket_dir = f'{appdir}/myproject/tmp/sockets'
     if not os.path.isdir(socket_dir):
         os.mkdir(socket_dir)
@@ -177,9 +169,7 @@ def main():
                 RAILS_ENV=development
 
                 # no need to edit below this line
-                export PATH=$PROJECTDIR/bin:$HOME/apps/$APPNAME/env/bin:$PATH
-                export GEM_PATH=$HOME/apps/$APPNAME/env/gems:$GEM_PATH
-                export GEM_HOME=$HOME/apps/$APPNAME/env
+                export PATH=$PROJECTDIR/bin:$PATH
                 source scl_source enable ruby33
 
                 PIDFILE="$PROJECTDIR/tmp/pids/server.pid"
@@ -349,9 +339,7 @@ def main():
 
                 # no need to edit below this line
                 PIDFILE="$PROJECTDIR/tmp/pids/server.pid"
-                export PATH=$PROJECTDIR/bin:$HOME/apps/$APPNAME/env/bin:$PATH
-                export GEM_PATH=$HOME/apps/$APPNAME/env/gems:$GEM_PATH
-                export GEM_HOME=$HOME/apps/$APPNAME/env
+                export PATH=$PROJECTDIR/bin:$PATH
                 export RAILS_ENV=$RAILS_ENV
                 source scl_source enable ruby33
                 ''')
