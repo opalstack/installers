@@ -71,6 +71,7 @@ def run_command(cmd, env, cwd=None):
         result = subprocess.check_output(shlex.split(cmd), cwd=cwd, env=env)
     except subprocess.CalledProcessError as e:
         logging.debug(e.output)
+        result = e.output
     return result
 
 def create_file(path, contents, writemode='w', perms=0o600):
