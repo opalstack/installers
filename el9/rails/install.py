@@ -144,11 +144,11 @@ def main():
     os.mkdir(f'{appdir}/tmp')
 
     # make rails project
-    cmd = f'scl enable ruby33 -- gem exec rails new myproject'
+    cmd = f'scl enable ruby33 nodejs20 -- gem exec rails new myproject'
     doit = run_command(cmd, CMD_ENV, cwd=f'{appdir}')
-    cmd = f'scl enable ruby33 -- bundle config set deployment true'
+    cmd = f'scl enable ruby33 nodejs20 -- bundle config set deployment true'
     doit = run_command(cmd, CMD_ENV, cwd=f'{appdir}/myproject')
-    cmd = f'scl enable ruby33 -- bundle install'
+    cmd = f'scl enable ruby33 nodejs20 -- bundle install'
     doit = run_command(cmd, CMD_ENV, cwd=f'{appdir}/myproject')
     cmd = f'rm -rf {appdir}/tmp/gem_exec'
     doit = run_command(cmd, CMD_ENV, cwd=f'{appdir}/myproject')
@@ -171,7 +171,7 @@ def main():
 
                 # no need to edit below this line
                 export PATH=$PROJECTDIR/bin:$PATH
-                source scl_source enable ruby33
+                source scl_source enable ruby33 nodejs20
 
                 PIDFILE="$PROJECTDIR/tmp/pids/server.pid"
                 if [ -e "$PIDFILE" ] && (pgrep -u seantest | grep -x -f $PIDFILE &> /dev/null); then
@@ -342,7 +342,7 @@ def main():
                 PIDFILE="$PROJECTDIR/tmp/pids/server.pid"
                 export PATH=$PROJECTDIR/bin:$PATH
                 export RAILS_ENV=$RAILS_ENV
-                source scl_source enable ruby33
+                source scl_source enable ruby33 nodejs20
                 ''')
     create_file(f'{appdir}/setenv', setenv, perms=0o600)
 
