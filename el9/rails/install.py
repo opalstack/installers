@@ -16,7 +16,7 @@ import random
 from urllib.parse import urlparse
 import urllib.request
 
-API_HOST = os.environ.get('API_URL').strip('https://').strip('http://')
+API_HOST = os.environ.get('API_URL','').strip('https://').strip('http://')
 API_BASE_URI = '/api/v1'
 CMD_ENV = {'PATH': '/usr/local/bin:/usr/bin:/bin','UMASK': '0002',}
 
