@@ -397,7 +397,7 @@ def main():
     api.notices.create_one({'type':'D', 'content':msg})
 
     #mark installed
-    api.apps.mark_installed([{'id': args.app_uuid}])
+    api.apps.mark_installed([args.app_uuid])
 
     logging.info(f'Completed installation of Node.js app {args.app_name}')
 
