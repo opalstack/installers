@@ -41,7 +41,7 @@ def install_package(package_name, retry_interval=5):
             print(f"'{package_name}' is not installed. Attempting to install...")
             try:
                 # Run the pip install command
-                subprocess.check_call([sys.executable, "-m", "/usr/bin/pip3.9", "install", package_name])
+                subprocess.check_call([sys.executable, "-m", "pip", "install", package_name])
                 print(f"'{package_name}' has been installed. Verifying installation...")
             except subprocess.CalledProcessError:
                 print(f"Failed to install '{package_name}'. Retrying in {retry_interval} seconds...")
