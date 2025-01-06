@@ -143,8 +143,7 @@ def main(api):
     cmd = f"/usr/bin/tar -xf {appdir}/node-v22.12.0-linux-x64.tar.xz --directory {appdir}/env"
     run_command(cmd)
 
-    activate = 
-    f"""
+    activate = textwrap.dedent(f"""
     #!/bin/bash
     # activate - Environment activation script for {appinfo["name"]}
 
@@ -195,11 +194,10 @@ def main(api):
     export APPNAME_ENV_ACTIVE=1
 
     echo "APPNAME environment activated."
-    """
+    """)
     create_file(f'{appdir}/activate', activate, perms=0o700)
 
-    deactivate = 
-    f"""
+    deactivate = textwrap.dedent(f"""
     #!/bin/bash
     # deactivate - Environment deactivation script for {appinfo["name"]}
 
@@ -240,7 +238,7 @@ def main(api):
     unset APPNAME_ENV_ACTIVE
 
     echo "APPNAME environment deactivated."
-    """
+    """)
     create_file(f'{appdir}/deactivate', deactivate, perms=0o700)
 
     CMD_ENV['HOME'] = f'/home/{appinfo["osuser_name"]}/'  
