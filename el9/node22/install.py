@@ -153,7 +153,7 @@ def main():
     logging.info(f'Started installation of Node 22 {args.app_name, args.app_uuid}')
 
     from opalstack.util import filt, filt_one
-    api = opalstack.Api(token=opal_token)
+    api = opalstack.Api(token=args.opal_token)
 
     appinfo = filt_one(api.apps.list_all(), {'id': args.app_uuid})
     appdir = f'/home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}'
