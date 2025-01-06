@@ -162,7 +162,7 @@ def main():
     node22_url = "https://nodejs.org/dist/v22.12.0/node-v22.12.0-linux-x64.tar.xz"
     download(node22_url, f"{appdir}/node-v22.12.0-linux-x64.tar.xz")
     
-    cmd = f"/usr/bin/tar -xf {appdir}/node-v22.12.0-linux-x64.tar.xz --directory {appdir}/env"
+    cmd = f"/usr/bin/tar -xf {appdir}/node-v22.12.0-linux-x64.tar.xz --directory {appdir}/env --strip-components=1"
     run_command(cmd)
 
     activate = textwrap.dedent(f"""
@@ -394,7 +394,7 @@ def main():
 
     # finished, push a notice
     msg = f'See README in app directory for more info.'
-    api.notices.create(msg)
+    api.notices.create_one({'type':'D', 'content':msg})
 
     #mark installed
     api.apps.mark_installed([{'id': args.app_uuid}])
