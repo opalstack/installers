@@ -15,9 +15,6 @@ import random
 from urllib.parse import urlparse
 import time
 
-UUID = os.environ.get('UUID')
-OPAL_TOKEN = os.environ.get('OPAL_TOKEN')
-APPNAME = os.environ.get('APPNAME')
 CMD_ENV = None
 
 def install_package(
@@ -153,8 +150,8 @@ def main(api):
     logging.basicConfig(level=logging.INFO,
                         format='[%(asctime)s] %(levelname)s: %(message)s')
     # go!
-    logging.info(f'Started installation of Node 22 {args.app_name}')
-    appinfo = filt_one(api.apps.list_all(), {'id':UUID})
+    logging.info(f'Started installation of Node 22 {args.app_name, args.app_uuid}')
+    appinfo = filt_one(api.apps.list_all(), {'id': args.app_uuid})
     appdir = f'/home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}'
     os.mkdir(f'{appdir}/env')
 
@@ -261,8 +258,6 @@ def main(api):
     echo "APPNAME environment deactivated."
     """)
     create_file(f'{appdir}/deactivate', deactivate, perms=0o700)
-
-    CMD_ENV['HOME'] = f'/home/{appinfo["osuser_name"]}/'  
 
     # make myproject/index.js
     cmd = f'mkdir -p {appdir}/myproject'
