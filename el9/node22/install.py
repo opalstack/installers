@@ -20,42 +20,63 @@ OPAL_TOKEN = os.environ.get('OPAL_TOKEN')
 APPNAME = os.environ.get('APPNAME')
 CMD_ENV = None
 
-def install_package(package_name, retry_interval=5):
+def install_package(
+    import_name,
+    package_name=None,
+    max_attempts=3,
+    retry_interval=5
+):
     """
-    Attempts to import the specified package. If not installed, installs it using pip,
-    and retries until successful.
+    Attempts to import `import_name`. If not installed, installs `package_name` via pip,
+    and retries until successful or until max_attempts is reached.
 
     Args:
-        package_name (str): The name of the package to install.
-        retry_interval (int): Seconds to wait before retrying after a failed attempt.
+        import_name (str): The name you use in `import <import_name>`.
+        package_name (str): PyPI package name to install (defaults to import_name).
+        max_attempts (int): How many times to attempt install + import.
+        retry_interval (int): Seconds to wait between attempts.
     """
-    while True:
-        try:
-            print(f"Attempting to import '{package_name}'...")
-            # Try to import the package
-            globals()[package_name] = __import__(package_name)
-            print(f"'{package_name}' is already installed and successfully imported.")
-            break  # Exit the loop if import is successful
+    if package_name is None:
+        # If package_name not provided, use the same as import_name
+        package_name = import_name
 
+    for attempt in range(1, max_attempts + 1):
+        try:
+            print(f"Attempt {attempt}/{max_attempts}: Trying to import '{import_name}'...")
+            globals()[import_name] = __import__(import_name)
+            print(f"Successfully imported '{import_name}'.")
+            return  # Successfully imported, so we can return
         except ImportError:
-            print(f"'{package_name}' is not installed. Attempting to install...")
+            print(f"'{import_name}' not found. Attempting to install '{package_name}'...")
             try:
-                # Run the pip install command
-                subprocess.check_call([sys.executable, "-m", "pip", "install", package_name])
-                print(f"'{package_name}' has been installed. Verifying installation...")
+                # We’ll install to the user site by default in case system site-packages is not writable
+                subprocess.check_call([
+                    sys.executable, "-m", "pip", "install", "--user", package_name
+                ])
             except subprocess.CalledProcessError:
                 print(f"Failed to install '{package_name}'. Retrying in {retry_interval} seconds...")
                 time.sleep(retry_interval)
-                continue  # Retry installation
+                continue
 
+            # If pip install succeeded, try the import again before the next loop iteration
             try:
-                # Try to import again after installation
-                globals()[package_name] = __import__(package_name)
-                print(f"'{package_name}' has been successfully installed and imported.")
-                break  # Exit the loop if import is successful after installation
+                globals()[import_name] = __import__(import_name)
+                print(f"Successfully installed and imported '{import_name}'.")
+                return
             except ImportError:
-                print(f"Package '{package_name}' is still not available after installation. Retrying in {retry_interval} seconds...")
+                # Even though pip says it installed successfully, Python still can't see it
+                print(
+                    f"Installed '{package_name}', but still cannot import '{import_name}'. "
+                    f"Will retry in {retry_interval} seconds..."
+                )
                 time.sleep(retry_interval)
+
+    # If we exit the for-loop, it means we never successfully imported
+    raise ImportError(
+        f"Could not import '{import_name}' after {max_attempts} attempts. "
+        f"Please check your environment or installation paths."
+    )
+
 
 def create_file(path, contents, writemode='w', perms=0o600):
     """make a file, perms are passed as octal"""
