@@ -15,7 +15,7 @@ import random
 from urllib.parse import urlparse
 import time
 
-CMD_ENV = None
+CMD_ENV = {}
 
 def install_package(
     import_name,
@@ -283,6 +283,8 @@ def main():
     # install ghost instance
     cmd = f'mkdir {appdir}/ghost'
     doit = run_command(cmd)
+
+
     CMD_ENV['NPM_CONFIG_BUILD_FROM_SOURCE'] = 'true'
     CMD_ENV['NODE_GYP_FORCE_PYTHON'] = '/usr/local/bin/python3.12'
     cmd = f'source {appdir}/activate && {appdir}/node/bin/ghost install local --port {appinfo["port"]} --log file --no-start --db sqlite3'
