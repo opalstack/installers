@@ -165,10 +165,10 @@ def main():
     appdir = f'/home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}'
     os.mkdir(f'{appdir}/env')
 
-    node22_url = "https://nodejs.org/dist/v22.12.0/node-v22.12.0-linux-x64.tar.xz"
-    download(node22_url, f"{appdir}/node-v22.12.0-linux-x64.tar.xz")
+    node_url = "https://nodejs.org/download/release/v20.18.1/node-v20.18.1-linux-x64.tar.xz"
+    download(node_url, f"{appdir}/node-v20.18.1-linux-x64.tar.xz")
     
-    cmd = f"/usr/bin/tar -xf {appdir}/node-v22.12.0-linux-x64.tar.xz --directory {appdir}/env --strip-components=1"
+    cmd = f"/usr/bin/tar -xf {appdir}/node-v20.18.1-linux-x64.tar.xz --directory {appdir}/env --strip-components=1"
     run_command(cmd)
 
     activate = textwrap.dedent(f"""
@@ -287,7 +287,7 @@ def main():
 
     CMD_ENV['NPM_CONFIG_BUILD_FROM_SOURCE'] = 'true'
     CMD_ENV['NODE_GYP_FORCE_PYTHON'] = '/usr/local/bin/python3.12'
-    cmd = f'source {appdir}/activate && {appdir}/node/bin/ghost install local --port {appinfo["port"]} --log file --no-start --db sqlite3'
+    cmd = f'source {appdir}/activate && {appdir}/node/bin/ghost install local --port {appinfo["port"]} --log file --no-start --db sqlite3 --dir {appdir}/ghost'
     doit = run_command(cmd, cwd=f'{appdir}/ghost')
 
     # configure log dir
