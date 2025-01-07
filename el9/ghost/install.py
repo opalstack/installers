@@ -389,9 +389,11 @@ def main():
     doit = run_command(cmd, cwd=f'{appdir}/ghost')
 
     # finished, push a notice
-    msg = f'Post-install configuration is required, see README in app directory for more info.'
-    payload = json.dumps([{'id': args.app_uuid}])
-    finished=api.post('/app/installed/', payload)
+    msg = f'See README in app directory for more info.'
+    api.notices.create_one({'type':'D', 'content':msg})
+
+    #mark installed
+    api.apps.mark_installed([args.app_uuid])
 
     logging.info(f'Completed installation of Ghost app {args.app_name}')
 
