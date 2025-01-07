@@ -303,8 +303,8 @@ def main():
 
                 APPNAME={appinfo["name"]}
 
-                # set node version via scl
-                source scl_source enable nodejs20
+                # set node version
+                source activate
                 NODE=$( which node )
                 NPM=$( which npm )
 
