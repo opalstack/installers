@@ -107,14 +107,19 @@ def gen_password(length=20):
     chars = string.ascii_letters + string.digits
     return ''.join(secrets.choice(chars) for i in range(length))
 
-def run_command(cmd, cwd=None, env=CMD_ENV):
-    """runs a command, returns output"""
+def run_command(cmd, cwd=None, env=None):
+    """Runs a command and returns its output"""
     logging.info(f'Running: {cmd}')
     try:
-        result = subprocess.check_output(shlex.split(cmd), cwd=cwd, env=env)
+        # Use shell=True to handle shell built-in commands like 'source'
+        result = subprocess.check_output(
+            cmd, shell=True, executable='/bin/bash', cwd=cwd, env=env, stderr=subprocess.STDOUT
+        )
+        return result.decode('utf-8')  # Decode bytes to string
     except subprocess.CalledProcessError as e:
-        logging.debug(e.output)
-    return result
+        logging.error(f"Command failed with exit code {e.returncode}")
+        logging.debug(f"Command output: {e.output.decode('utf-8')}")
+        raise RuntimeError(f"Command execution failed: {cmd}") from e
 
 def add_cronjob(cronjob):
     """appends a cron job to the user's crontab"""
