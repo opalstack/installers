@@ -364,7 +364,7 @@ def main():
                 ''')
     create_file(f'{appdir}/README', readme)
 
-    run_command(f'source activate && npx create-next-app@latest myproject --use-npm --typescript --eslint --tailwind --src-dir --app --import-alias "@/*" --yes', cwd=appdir, shell=True)
+    run_command(f'source activate && npx create-next-app@latest myproject --use-npm --typescript --eslint --tailwind --src-dir --app --import-alias "@/*" --yes', cwd=appdir)
 
     # start it
     cmd = f'{appdir}/start'
