@@ -216,7 +216,7 @@ def main():
                   exit 99
                 fi
 
-                scl enable rh-git227 -- /usr/sbin/daemonize -a -c $PWD -p $PIDFILE -e $HOME/logs/apps/{appinfo["name"]}/gitea_error.log -o $HOME/logs/apps/{appinfo["name"]}/gitea.log $PWD/gitea
+                /usr/sbin/daemonize -a -c $PWD -p $PIDFILE -e $HOME/logs/apps/{appinfo["name"]}/gitea_error.log -o $HOME/logs/apps/{appinfo["name"]}/gitea.log $PWD/gitea
 
                 chmod 600 "$PIDFILE"
                 echo "Started."
