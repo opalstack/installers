@@ -138,6 +138,7 @@ def main():
     CMD_ENV = {'PATH': f'{appdir}/myproject/bin:{appdir}/env/bin:/usr/local/bin:/usr/bin:/bin',
                'TMPDIR': f'{appdir}/tmp',
                'GEM_HOME': f'{appdir}/env',
+               'BUNDLE_FORCE_RUBY_PLATFORM': 'true',
                'UMASK': '0002',
                'HOME': f'/home/{appinfo["osuser_name"]}',}
     # make dirs env and tmp
