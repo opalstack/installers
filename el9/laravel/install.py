@@ -172,10 +172,10 @@ def main():
     # install composer
     doit = run_command(f'mkdir -p {appdir}/bin')
     download(COMPOSER_URL, f'{appdir}/bin/composer-setup.php')
-    doit = run_command( f'/bin/php82 {appdir}/bin/composer-setup.php --install-dir={appdir}/bin --filename=composer')
+    doit = run_command( f'/bin/php83 {appdir}/bin/composer-setup.php --install-dir={appdir}/bin --filename=composer')
     
     # install laravel
-    doit = run_command(f'/bin/php82 {appdir}/bin/composer create-project laravel/laravel {appdir}/project')
+    doit = run_command(f'/bin/php83 {appdir}/bin/composer create-project laravel/laravel {appdir}/project')
 
     # finished, push a notice
     msg = f'See README in app directory for more info.'
