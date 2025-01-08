@@ -52,4 +52,6 @@ else
     /bin/setfacl -m u:apache:r-- /home/$USER/apps/$APPNAME/authz
     /usr/bin/echo -e "[/]\n~\* = rw" > /home/$USER/apps/$APPNAME/authz
     /usr/bin/curl -s -X POST --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN" -d'[{"id": "'$UUID'"}]' $API_URL/api/v1/app/installed/
+    /usr/bin/curl -s -X POST --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN" -d'[{"type": "D", "content":"'"Created Subversion app $APPNAME with login $USER / $PASSWORD"'"}]' $API_URL/api/v1/notice/create/
+
 fi;
