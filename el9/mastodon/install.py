@@ -1,4 +1,4 @@
-#!/usr/local/bin/python3.11
+#!/bin/python3
 
 import argparse
 import http.client
