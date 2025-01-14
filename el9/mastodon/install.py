@@ -179,7 +179,7 @@ def main():
     appdir = f'/home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}'
     CMD_ENV = {
         "RAILS_ENV": "production",
-        "PATH": f"{appdir}/node/bin:{appdir}/mastodon/bin:/usr/local/bin:/usr/bin:/bin:/usr/pgsql-11/bin/",
+        "PATH": f"{appdir}/node/bin:{appdir}/mastodon/bin:/usr/local/bin:/usr/bin:/bin:/usr/pgsql-17/bin/",
         "LD_LIBRARY_PATH": f"{appdir}/mastodon/lib",
         "TMPDIR": f"{appdir}/tmp",
         "GEM_HOME": f"{appdir}/mastodon",
@@ -536,7 +536,7 @@ def main():
 
                 # no need to edit below this line
                 export PATH=$HOME/apps/$APPNAME/node/bin:$PROJECTDIR/bin:$PATH
-                source scl_source enable devtoolset-11 nodejs20 ruby32 rh-redis5
+                source scl_source enable nodejs20 ruby33
                 PIDFILE="$PROJECTDIR/tmp/pids/supervisord.pid"
 
                 # clean up streaming socket if node isn't running
@@ -594,11 +594,11 @@ def main():
                 RAILS_ENV=production
 
                 # no need to edit below this line
-                export PATH=$HOME/apps/$APPNAME/node/bin:$HOME/apps/$APPNAME/mastodon/bin:/usr/local/bin:/bin:/usr/bin:/usr/local/sbin:/usr/sbin:/opt/puppetlabs/bin:/usr/pgsql-11/bin/:$HOME/.local/bin:$HOME/bin:$PATH
+                export PATH=$HOME/apps/$APPNAME/node/bin:$HOME/apps/$APPNAME/mastodon/bin:/usr/local/bin:/bin:/usr/bin:/usr/local/sbin:/usr/sbin:/opt/puppetlabs/bin:/usr/pgsql-17/bin/:$HOME/.local/bin:$HOME/bin:$PATH
                 export GEM_PATH=$HOME/apps/$APPNAME/mastodon/vendor/bundle/ruby/gems
                 export GEM_HOME=$HOME/apps/$APPNAME/mastodon/
                 export RAILS_ENV=$RAILS_ENV
-                source scl_source enable devtoolset-11 nodejs20 ruby32 rh-redis5
+                source scl_source enable nodejs20 ruby33
                 """
     )
     create_file(f"{appdir}/setenv", setenv, perms=0o600)
@@ -814,7 +814,7 @@ def main():
     conf.close()
 
     # install supervisord
-    cmd = f"pip3.11 install --target={appdir}/mastodon/bin/ supervisor"
+    cmd = f"pip3 install --target={appdir}/mastodon/bin/ supervisor"
     doit = run_command(cmd, CMD_ENV, cwd=f"{appdir}")
     cmd = f"rsync -r bin/bin/ bin/"
     doit = run_command(cmd, CMD_ENV, cwd=f"{appdir}/mastodon")
