@@ -23,7 +23,7 @@ CMD_ENV = {
     "PATH": "/usr/local/bin:/usr/bin:/bin",
     "UMASK": "0002",
 }
-CMD_PREFIX = '/bin/scl enable devtoolset-11 nodejs20 ruby32 rh-redis5 -- '
+CMD_PREFIX = '/bin/scl enable nodejs20 ruby33 -- '
 MASTODON_VERSION = "4.2.7"
 
 
