@@ -167,7 +167,7 @@ def main():
 
     node_url = "https://nodejs.org/download/release/v20.18.1/node-v20.18.1-linux-x64.tar.xz"
     download(node_url, f"{appdir}/node-v20.18.1-linux-x64.tar.xz")
-    
+
     cmd = f"/usr/bin/tar -xf {appdir}/node-v20.18.1-linux-x64.tar.xz --directory {appdir}/env --strip-components=1"
     run_command(cmd)
 
@@ -321,14 +321,14 @@ def main():
                 fi
 
                 if [ -e "$PIDFILE" ] && (pgrep -F $PIDFILE &> /dev/null); then
-                  pkill -g $(cat $PIDFILE)
+                  kill $(cat $PIDFILE)
                   sleep 3
                 fi
 
                 if [ -e "$PIDFILE" ] && (pgrep -F $PIDFILE &> /dev/null); then
                   echo "$APPNAME did not stop, killing it."
                   sleep 3
-                  pkill -9 -g $(cat $PIDFILE)
+                  kill -9 $(cat $PIDFILE)
                 fi
                 rm -f $PIDFILE
                 echo "Stopped $APPNAME."

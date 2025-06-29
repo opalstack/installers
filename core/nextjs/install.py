@@ -148,7 +148,7 @@ def main():
     api = OpalstackAPITool(API_HOST, API_BASE_URI, args.opal_token, args.opal_user, args.opal_password)
     appinfo = api.get(f'/app/read/{args.app_uuid}')
     appdir = f'/home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}'
-    CMD_ENV['HOME'] = f'/home/{appinfo["osuser_name"]}/'  
+    CMD_ENV['HOME'] = f'/home/{appinfo["osuser_name"]}/'
 
     # start script
     start_script = textwrap.dedent(f'''\
@@ -199,14 +199,14 @@ def main():
                 fi
 
                 if [ -e "$PIDFILE" ] && (pgrep -F $PIDFILE &> /dev/null); then
-                  pkill -g $(cat $PIDFILE)
+                  kill $(cat $PIDFILE)
                   sleep 3
                 fi
 
                 if [ -e "$PIDFILE" ] && (pgrep -F $PIDFILE &> /dev/null); then
                   echo "$APPNAME did not stop, killing it."
                   sleep 3
-                  pkill -9 -g $(cat $PIDFILE)
+                  kill -9 $(cat $PIDFILE)
                 fi
                 rm -f $PIDFILE
                 echo "Stopped $APPNAME."
