@@ -43,12 +43,12 @@ else
          echo 'UUID validation and server lookup failed.'
          exit 1
     fi;
-    /usr/bin/touch /home/$USER/apps/$APPNAME/passwd
+    /usr/bin/touch /home/$USER/apps/$APPNAME/.htpasswd
     PASSWORD=$(date +%s | sha256sum | base64 | head -c 16 ; echo)
     DIGEST="$( /bin/printf "%s:%s:%s" "$USER" "$APPNAME" "$PASSWORD" | /bin/md5sum | awk '{print $1}' )"
     /bin/setfacl -m u:apache:rwx /home/$USER/logs/apps/$APPNAME/
-    /bin/setfacl -m u:apache:r-- /home/$USER/logs/apps/$APPNAME/passwd
-    /bin/printf "%s:%s:%s\n" "$USER" "$APPNAME" "$DIGEST" >> "/home/$USER/apps/$APPNAME/passwd"
+    /bin/setfacl -m u:apache:r-- /home/$USER/logs/apps/$APPNAME/.htpasswd
+    /bin/printf "%s:%s:%s\n" "$USER" "$APPNAME" "$DIGEST" >> "/home/$USER/apps/$APPNAME/.htpasswd"
     /usr/bin/curl -s -X POST --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN" -d'[{"id": "'$UUID'"}]' $API_URL/api/v1/app/installed/
     /usr/bin/curl -s -X POST --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN" -d'[{"type": "D", "content":"'"Created WebDAV app $APPNAME with login $USER / $PASSWORD"'"}]' $API_URL/api/v1/notice/create/
 fi;
