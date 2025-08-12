@@ -161,7 +161,7 @@ def main():
     doit = run_command(cmd)
     CMD_ENV['NPM_CONFIG_BUILD_FROM_SOURCE'] = 'true'
     CMD_ENV['NODE_GYP_FORCE_PYTHON'] = '/usr/local/bin/python3.11'
-    cmd = f'scl enable devtoolset-11 nodejs18 -- {appdir}/node/bin/ghost install local --port {appinfo["port"]} --log file --no-start --db sqlite3'
+    cmd = f'scl enable devtoolset-11 nodejs18 -- {appdir}/node/bin/ghost install v5.130.2 --no-setup-linux-user --no-setup --port {appinfo["port"]} --log file --no-start --db sqlite3'
     doit = run_command(cmd, cwd=f'{appdir}/ghost')
 
     # configure log dir
@@ -170,6 +170,16 @@ def main():
 
     # configure mail transport
     cmd = f'scl enable devtoolset-11 nodejs18 -- {appdir}/node/bin/ghost config set mail[\'transport\'] sendmail'
+    doit = run_command(cmd, cwd=f'{appdir}/ghost')
+
+    # configure port
+    cmd = f'scl enable devtoolset-11 nodejs18 -- {appdir}/node/bin/ghost config set server[\'port\'] {appinfo["port"]}'
+    doit = run_command(cmd, cwd=f'{appdir}/ghost')
+
+    # configure db
+    cmd = f'scl enable devtoolset-11 nodejs18 -- {appdir}/node/bin/ghost config set database[\'client\'] sqlite3'
+    doit = run_command(cmd, cwd=f'{appdir}/ghost')
+    cmd = f'scl enable devtoolset-11 nodejs18 -- {appdir}/node/bin/ghost config set database[\'connection\'][\'filename\'] {appdir}/ghost.db'
     doit = run_command(cmd, cwd=f'{appdir}/ghost')
 
     # set instance name in ghost cli
