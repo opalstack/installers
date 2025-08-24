@@ -101,21 +101,17 @@ def ensure_pg_same_server(opal_token, appinfo, prefix):
         sys.exit(1)
 
     def pick():
-        # exact id
         for s in pg_servers:
             if s.get('id') == web_server.get('id'):
                 return s
-        # exact hostname
         for s in pg_servers:
             if s.get('hostname') and s['hostname'] == web_server.get('hostname'):
                 return s
-        # same dc/region
         for k in ('datacenter', 'dc', 'region', 'location'):
             dc = web_server.get(k)
             if dc:
                 m = [x for x in pg_servers if x.get(k) == dc]
                 if m: return m[0]
-        # same suffix
         suf = '.'.join((web_server.get('hostname') or '').split('.')[-2:])
         if suf:
             m = [x for x in pg_servers if (x.get('hostname') or '').endswith(suf)]
@@ -175,17 +171,21 @@ def main():
     DISCOURSE_USERNAME="admin"
     DISCOURSE_PASSWORD="{gen_password(16)}"
     DISCOURSE_EMAIL="admin@example.com"
+
     POSTGRESQL_HOST="{pg['host']}"
     POSTGRESQL_PORT="{pg['port']}"
     POSTGRESQL_USERNAME="{pg['user']}"
     POSTGRESQL_PASSWORD="{pg['password']}"
     POSTGRESQL_DATABASE="{pg['db']}"
+
     SMTP_HOST=""
     SMTP_PORT="587"
     SMTP_USER=""
     SMTP_PASSWORD=""
     SMTP_TLS="true"
+
     DISCOURSE_ENABLE_HTTPS="no"
+
     REDIS_HOST="{appinfo['name']}-redis"
     REDIS_PASSWORD=""
     """)
@@ -203,23 +203,30 @@ def main():
     IMG_SQ="{IMG_SQ}"
     IMG_REDIS="{IMG_REDIS}"
     source "$APPDIR/.env"
+
     podman pull "$IMG_WEB" >/dev/null || true
     podman pull "$IMG_SQ"  >/dev/null || true
     podman pull "$IMG_REDIS" >/dev/null || true
+
     podman rm -f "$APP-redis" "$APP-sidekiq" "$APP" >/dev/null 2>&1 || true
     podman pod rm -f "$POD" >/dev/null 2>&1 || true
+
     podman pod create --name "$POD" -p 127.0.0.1:${{PORT}}:3000
+
     podman run -d --name "$APP-redis" --pod "$POD" -e ALLOW_EMPTY_PASSWORD=yes "$IMG_REDIS"
+
     podman run -d --name "$APP" --pod "$POD" \\
       -v "$APPDIR/data/discourse:/bitnami/discourse" \\
       --env-file "$APPDIR/.env" \\
       --label io.containers.autoupdate=registry \\
       "$IMG_WEB"
+
     podman run -d --name "$APP-sidekiq" --pod "$POD" \\
       -v "$APPDIR/data/discourse:/bitnami/discourse" \\
       --env-file "$APPDIR/.env" \\
       --label io.containers.autoupdate=registry \\
       "$IMG_SQ"
+
     echo "Started Discourse for {appinfo['name']} on 127.0.0.1:{port}"
     """)
     stop = textwrap.dedent(f"""\
@@ -253,8 +260,13 @@ def main():
 
     App: {appinfo['name']}
     Port: {port}
+
     Data: {appdir}/data/discourse
     Postgres: {pg['host']} (db {pg['db']} user {pg['user']})
+
+    After assigning this app to a site in your control panel, complete setup at:
+      - https://YOUR-DOMAIN/wizard
+      - https://YOUR-DOMAIN/admin
     """)
     create_file(f'{appdir}/README.txt', readme, perms=0o600)
 
@@ -263,6 +275,22 @@ def main():
     add_cronjob(f'0{m},1{m},2{m},3{m},4{m},5{m} * * * * {appdir}/check > /dev/null 2>&1')
     hh = random.randint(1,5); mm = random.randint(0,59)
     add_cronjob(f'{mm} {hh} * * * {appdir}/update > /dev/null 2>&1')
+
+    # start once (last mile)
+    doit = run_command(f'{appdir}/start')
+
+    # finished: mark installed + notice with links
+    payload = json.dumps([{'id': args.app_uuid}])
+    finished = api.post('/app/installed/', payload)
+
+    msg = (
+        "Discourse installed. Assign this app to a site, then finish setup at "
+        "https://YOUR-DOMAIN/wizard (initial wizard) and https://YOUR-DOMAIN/admin (admin)."
+    )
+    notice_payload = json.dumps([{'type': 'D', 'content': msg}])
+    notice = api.post('/notice/create/', notice_payload)
+
+    logging.info(f'Completed installation of Discourse app {args.app_name}')
 
 if __name__ == '__main__':
     main()
