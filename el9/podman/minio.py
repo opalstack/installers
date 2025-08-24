@@ -10,7 +10,8 @@ IMG = 'docker.io/minio/minio:latest'
 # ----- API wrapper (Ghost style) -----
 class OpalstackAPITool():
     def __init__(self, host, base_uri, authtoken, user, password):
-        self.host = host; self.base_uri = base_uri
+        self.host = host
+        self.base_uri = base_uri
         if not authtoken:
             endpoint = self.base_uri + '/login/'
             payload = json.dumps({'username': user, 'password': password})
@@ -22,15 +23,23 @@ class OpalstackAPITool():
                 sys.exit(1)
             authtoken = result['token']
         self.headers = {'Content-type':'application/json', 'Authorization': f'Token {authtoken}'}
+
     def get(self, endpoint):
         endpoint = self.base_uri + endpoint
         conn = http.client.HTTPSConnection(self.host)
         conn.request('GET', endpoint, headers=self.headers)
         return json.loads(conn.getresponse().read() or b'{}')
 
+    def post(self, endpoint, payload):
+        endpoint = self.base_uri + endpoint
+        conn = http.client.HTTPSConnection(self.host)
+        conn.request('POST', endpoint, payload, headers=self.headers)
+        return json.loads(conn.getresponse().read() or b'{}')
+
 # ----- helpers (Ghost style) -----
 def create_file(path, contents, writemode='w', perms=0o600):
-    with open(path, writemode) as f: f.write(contents)
+    with open(path, writemode) as f:
+        f.write(contents)
     os.chmod(path, perms)
     logging.info(f'Created file {path} {oct(perms)}')
 
@@ -47,7 +56,8 @@ def run_command(cmd, cwd=None, env=CMD_ENV):
         sys.exit(e.returncode)
 
 def add_cronjob(cronjob):
-    homedir = os.path.expanduser('~'); tmpname = f'{homedir}/.tmp{gen_password(8)}'
+    homedir = os.path.expanduser('~')
+    tmpname = f'{homedir}/.tmp{gen_password(8)}'
     with open(tmpname, 'w') as tmp:
         subprocess.run('crontab -l'.split(), stdout=tmp)
         tmp.write(f'{cronjob}\n')
@@ -74,7 +84,8 @@ def main():
     api = OpalstackAPITool(API_HOST, API_BASE_URI, a.opal_token, a.opal_user, a.opal_pass)
     app = api.get(f'/app/read/{a.app_uuid}')
     if not app.get('name'):
-        logging.error('App not found'); sys.exit(1)
+        logging.error('App not found')
+        sys.exit(1)
 
     appdir = f"/home/{app['osuser_name']}/apps/{app['name']}"
     port   = int(app['port'])
@@ -83,7 +94,7 @@ def main():
     run_command(f'mkdir -p {appdir}/data')
     run_command(f'mkdir -p {appdir}/config')
 
-    # Console port: by default, use PORT+1 (will be bound to 127.0.0.1 too)
+    # Console port: by default, use PORT+1 (bound to 127.0.0.1 too)
     console_port = int(a.console_port) if a.console_port else port + 1
 
     # .env
@@ -108,7 +119,7 @@ def main():
     source "$APPDIR/.env"
 
     podman pull "$IMG" >/dev/null || true
-    podman rm -f "$APP" >/dev/null 2>&1 || true
+    podman rm -f "$APP" >/devnull 2>&1 || true
 
     # Note: exposes BOTH ports on 127.0.0.1 (panel routes one; the other is for SSH tunnel or a second App if you make one)
     podman run -d --name "$APP" \\
@@ -170,6 +181,21 @@ curl -fsS "http://127.0.0.1:{port}/minio/health/live" >/dev/null || "{appdir}/st
     add_cronjob(f'0{m},2{m},4{m} * * * * {appdir}/check > /dev/null 2>&1')
     hh = random.randint(1,5); mm = random.randint(0,59)
     add_cronjob(f'{mm} {hh} * * * {appdir}/update > /dev/null 2>&1')
+
+    # Start once
+    run_command(f'{appdir}/start')
+
+    # ---- REQUIRED PANEL SIGNALS ----
+    msg = (
+        f"MinIO installed. API on 127.0.0.1:{port}, Console on 127.0.0.1:{console_port}. "
+        f"Data: {appdir}/data, Config: {appdir}/config"
+    )
+    installed_payload = json.dumps([{'id': a.app_uuid}])
+    api.post('/app/installed/', installed_payload)  # marks the app as installed
+    notice_payload = json.dumps([{'type': 'D', 'content': msg}])
+    api.post('/notice/create/', notice_payload)     # dashboard notice
+
+    logging.info(f'Completed installation of MinIO app {a.app_name} - {msg}')
 
 if __name__ == '__main__':
     main()
