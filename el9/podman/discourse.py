@@ -77,7 +77,7 @@ def create_pg_same_server(api, appinfo, prefix='disc'):
     dbs = api.get('/psqldb/list/')
     d = next((x for x in dbs if x.get('name') == uname), None)
     if not d: logging.error('Failed to create PG database'); sys.exit(1)
-    # ready flags
+    # ready flags (simple poll like Ghost installers typically do)
     while not api.get(f"/psqldb/read/{d['id']}").get('ready'): pass
     while not api.get(f"/psqluser/read/{u['id']}").get('ready'): pass
     host = api.get(f"/psqldb/read/{d['id']}").get('hostname') or '127.0.0.1'
@@ -94,34 +94,35 @@ def main():
 
     logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(levelname)s: %(message)s')
     if not args.app_uuid:
-        logging.error('Missing UUID (-i)')
-        sys.exit(1)
+        logging.error('Missing UUID (-i)'); sys.exit(1)
 
     api = OpalstackAPITool(API_HOST, API_BASE_URI, args.opal_token, args.opal_user, args.opal_pass)
     app = api.get(f'/app/read/{args.app_uuid}')
     if not app.get('name'):
         logging.error('App not found'); sys.exit(1)
 
-    appdir = f"/home/{app['osuser_name']}/apps/{app['name']}"
-    port   = int(app['port'])
+    appdir  = f"/home/{app['osuser_name']}/apps/{app['name']}"
+    port    = int(app['port'])
+    logdir  = f"/home/{app['osuser_name']}/logs/apps/{app['name']}"
 
     # dirs
     run_command(f'mkdir -p {appdir}/data/discourse')
     run_command(f'mkdir -p {appdir}/tmp')
+    run_command(f'mkdir -p {logdir}')
 
     # PG (same server)
     pg = create_pg_same_server(api, app, prefix='discours')
 
-    # .env (Bitnami vars; set hostname placeholder, DB, and admin bootstrap)
+    # .env (Bitnami vars)
     env = textwrap.dedent(f"""\
     # Public hostname (set after domain is assigned):
     DISCOURSE_HOSTNAME="forum.example.com"
+    DISCOURSE_ENABLE_HTTPS="no"
 
     # Bootstrap admin (complete via /wizard):
     DISCOURSE_USERNAME="admin"
     DISCOURSE_PASSWORD="{gen_password(16)}"
     DISCOURSE_EMAIL="admin@example.com"
-    DISCOURSE_ENABLE_HTTPS="no"
 
     # Database (Bitnami Discourse expects these names)
     DISCOURSE_DATABASE_HOST="{pg['host']}"
@@ -130,16 +131,17 @@ def main():
     DISCOURSE_DATABASE_PASSWORD="{pg['password']}"
     DISCOURSE_DATABASE_NAME="{pg['db']}"
 
+    # Force TCP (avoid Unix socket fallback)
+    DISCOURSE_DB_SOCKET=""
+    DISCOURSE_DB_HOST="{pg['host']}"
+    DISCOURSE_DB_PORT="{pg['port']}"
+    DISCOURSE_DB_NAME="{pg['db']}"
+    DISCOURSE_DB_USERNAME="{pg['user']}"
+    DISCOURSE_DB_PASSWORD="{pg['password']}"
+
     # Redis runs inside the pod
     DISCOURSE_REDIS_HOST="127.0.0.1"
     DISCOURSE_REDIS_PORT_NUMBER="6379"
-
-    # Optional SMTP (set these when you know them)
-    # DISCOURSE_SMTP_HOST="smtp.example.com"
-    # DISCOURSE_SMTP_PORT_NUMBER="587"
-    # DISCOURSE_SMTP_USER="smtp-user"
-    # DISCOURSE_SMTP_PASSWORD="smtp-pass"
-    # DISCOURSE_SMTP_PROTOCOL="tls"
     """)
     create_file(f'{appdir}/.env', env, perms=0o600)
 
@@ -151,6 +153,7 @@ def main():
     POD="$APP-pod"
     PORT="{port}"
     APPDIR="{appdir}"
+    LOGDIR="{logdir}"
     IMG_WEB="{IMG_WEB}"
     IMG_REDIS="{IMG_REDIS}"
     source "$APPDIR/.env"
@@ -163,17 +166,21 @@ def main():
 
     podman pod create --name "$POD" -p 127.0.0.1:${{PORT}}:3000
 
+    # Redis inside pod (no host port exposed)
     podman run -d --name "$APP-redis" --pod "$POD" -e ALLOW_EMPTY_PASSWORD=yes "$IMG_REDIS"
 
+    # Web (mount log dir into container log path)
     podman run -d --name "$APP" --pod "$POD" \\
       -v "$APPDIR/data/discourse:/bitnami/discourse" \\
+      -v "$LOGDIR:/bitnami/discourse/log" \\
       --env-file "$APPDIR/.env" \\
       --label io.containers.autoupdate=registry \\
       "$IMG_WEB"
 
-    # sidekiq from the SAME image
+    # Sidekiq (same image, log dir mounted too)
     podman run -d --name "$APP-sidekiq" --pod "$POD" \\
       -v "$APPDIR/data/discourse:/bitnami/discourse" \\
+      -v "$LOGDIR:/bitnami/discourse/log" \\
       --env-file "$APPDIR/.env" \\
       --label io.containers.autoupdate=registry \\
       "$IMG_WEB" /opt/bitnami/scripts/discourse-sidekiq/run.sh
@@ -187,14 +194,19 @@ def main():
     podman pod rm -f {app['name']}-pod >/dev/null 2>&1 || true
     echo "Stopped Discourse for {app['name']}"
     """)
-    logs = f"#!/bin/bash\npodman logs -f {app['name']}\n"
+    # Tail app files in the same folder as install.log (production.log/sidekiq.log)
+    logs = textwrap.dedent(f"""\
+    #!/bin/bash
+    set -Eeuo pipefail
+    tail -F "{logdir}/production.log" "{logdir}/sidekiq.log"
+    """)
     update = textwrap.dedent(f"""\
     #!/bin/bash
     set -Eeuo pipefail
     "{appdir}/stop"
     "{appdir}/start"
     """)
-    # IMPORTANT: don't restart during migrations; only if not running
+    # Only restart if web container is NOT running (avoid killing migrations)
     check = textwrap.dedent(f"""\
     #!/bin/bash
     set -Eeuo pipefail
@@ -214,32 +226,33 @@ def main():
     readme = textwrap.dedent(f"""\
     # Opalstack Discourse
 
-    **App:** {app['name']}  
-    **Port:** {port} → container 3000  
-    **Data:** {appdir}/data/discourse  
-    **DB:** host {pg['host']} / db {pg['db']} / user {pg['user']}
+    **App:** {app['name']}
+    **Port:** {port} → container 3000
+    **Data:** {appdir}/data/discourse
+    **Env:**  {appdir}/.env
+    **Logs:** {logdir}/ (production.log, sidekiq.log)  ← rotated by Opalstack
 
-    ## Manage
-    - Start: `{appdir}/start`
-    - Stop: `{appdir}/stop`
-    - Logs: `{appdir}/logs`
-    - Update (pull + restart): `{appdir}/update`
-    - Health (auto-heal): cron runs `{appdir}/check`
+    ## Commands
+    - Start:  {appdir}/start
+    - Stop:   {appdir}/stop
+    - Logs:   {appdir}/logs
+    - Update: {appdir}/update
+    - Health: cron runs {appdir}/check (restarts only if not running)
 
     ## First boot
-    Discourse may take **10–15+ minutes** to initialize (migrations, asset precompile). HTTP 502s are normal until this completes. We do **not** auto-restart while the container is running.
+    Discourse may take time to initialize (migrations, assets). 502s are expected until Puma is up.
 
-    ## After you assign a domain
-    - Set `DISCOURSE_HOSTNAME` in `{appdir}/.env`
-    - (Optional) set SMTP vars for email (`DISCOURSE_SMTP_*`)
-    - Run `{appdir}/update`
-    - Complete setup:
-      - http(s)://YOUR-DOMAIN/wizard
-      - http(s)://YOUR-DOMAIN/admin
+    ## After assigning a domain
+    1) Set `DISCOURSE_HOSTNAME` in {appdir}/.env
+    2) (Optional) set SMTP envs (`DISCOURSE_SMTP_*`)
+    3) Run `{appdir}/update`
+    4) Complete setup:
+       - http(s)://YOUR-DOMAIN/wizard
+       - http(s)://YOUR-DOMAIN/admin
     """)
     create_file(f'{appdir}/README.md', readme, perms=0o600)
 
-    # cron (check every 10m; nightly update random hour)
+    # cron (check often; nightly update)
     m = random.randint(0,9)
     add_cronjob(f'0{m},1{m},2{m},3{m},4{m},5{m} * * * * {appdir}/check > /dev/null 2>&1')
     hh = random.randint(1,5); mm = random.randint(0,59)
@@ -250,8 +263,7 @@ def main():
 
     # panel signals
     api.post('/app/installed/', json.dumps([{'id': args.app_uuid}]))
-    msg = ("Discourse installed. Assign a domain, set DISCOURSE_HOSTNAME in .env, "
-           "then finish setup:\n• http(s)://YOUR-DOMAIN/wizard\n• http(s)://YOUR-DOMAIN/admin")
+    msg = f'Discourse installed for app {app["name"]}. See README.md in {appdir} for commands and post-install steps.'
     api.post('/notice/create/', json.dumps([{'type': 'M', 'content': msg}]))
 
     logging.info(f'Completed installation of Discourse app {args.app_name}')
