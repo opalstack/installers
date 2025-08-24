@@ -1,4 +1,4 @@
-#!/usr/local/bin/python3.11
+#!/usr/bin/python3
 import argparse, sys, logging, os, http.client, json, textwrap, secrets, string, subprocess, shlex, random, re
 from urllib.parse import urlparse
 

@@ -1,4 +1,4 @@
-#!/usr/local/bin/python3.11
+#!/usr/bin/python3
 import argparse, sys, logging, os, http.client, json, textwrap, secrets, string, subprocess, shlex, random
 API_HOST=(os.environ.get('API_URL') or 'https://my.opalstack.com').strip('https://').strip('http://')
 API_BASE_URI='/api/v1'
