@@ -1,173 +1,200 @@
-#!/usr/bin/python3
-import argparse, sys, logging, os, http.client, json, textwrap, secrets, string, subprocess, shlex, random, time
+#!/usr/local/bin/python3.13
+import argparse
+import sys
+import logging
+import os
+import http.client
+import json
+import textwrap
+import secrets
+import string
+import subprocess
+import shlex
+import random
+import time
+from urllib.parse import urlparse
 
-API_HOST = (os.environ.get('API_URL') or 'https://my.opalstack.com').strip('https://').strip('http://')
+API_HOST = os.environ.get('API_URL').strip('https://').strip('http://')
 API_BASE_URI = '/api/v1'
-CMD_ENV = {'PATH': '/usr/local/bin:/usr/bin:/bin', 'UMASK': '0002'}
+CMD_ENV = {'PATH': '/usr/local/bin:/usr/bin:/bin','UMASK': '0002',}
 
-IMG = 'docker.io/minio/minio:latest'
-CONSOLE_SUFFIX = '-console'  # name for the 2nd app
-
-# ----- API wrapper -----
 class OpalstackAPITool():
+    """simple wrapper for http.client get and post"""
     def __init__(self, host, base_uri, authtoken, user, password):
-        self.host = host; self.base_uri = base_uri
+        self.host = host
+        self.base_uri = base_uri
+
+        # if there is no auth token, then try to log in with provided credentials
         if not authtoken:
             endpoint = self.base_uri + '/login/'
-            payload = json.dumps({'username': user, 'password': password})
+            payload = json.dumps({
+                'username': user,
+                'password': password
+            })
             conn = http.client.HTTPSConnection(self.host)
-            conn.request('POST', endpoint, payload, headers={'Content-type':'application/json'})
-            result = json.loads(conn.getresponse().read() or b'{}')
+            conn.request('POST', endpoint, payload, headers={'Content-type': 'application/json'})
+            result = json.loads(conn.getresponse().read())
             if not result.get('token'):
-                logging.error('Invalid username/password and no token'); sys.exit(1)
-            authtoken = result['token']
-        self.headers = {'Content-type':'application/json', 'Authorization': f'Token {authtoken}'}
+                logging.warn('Invalid username or password and no auth token provided, exiting.')
+                sys.exit()
+            else:
+                authtoken = result['token']
+
+        self.headers = {
+            'Content-type': 'application/json',
+            'Authorization': f'Token {authtoken}'
+        }
+
     def get(self, endpoint):
+        """GETs an API endpoint"""
+        endpoint = self.base_uri + endpoint
         conn = http.client.HTTPSConnection(self.host)
-        conn.request('GET', self.base_uri + endpoint, headers=self.headers)
-        return json.loads(conn.getresponse().read() or b'{}')
+        conn.request('GET', endpoint, headers=self.headers)
+        connread = conn.getresponse().read()
+        logging.info(connread)
+        return json.loads(connread)
+
     def post(self, endpoint, payload):
+        """POSTs data to an API endpoint"""
+        endpoint = self.base_uri + endpoint
         conn = http.client.HTTPSConnection(self.host)
-        conn.request('POST', self.base_uri + endpoint, payload, headers=self.headers)
-        return json.loads(conn.getresponse().read() or b'{}')
+        conn.request('POST', endpoint, payload, headers=self.headers)
+        return json.loads(conn.getresponse().read())
 
-# ----- helpers -----
 def create_file(path, contents, writemode='w', perms=0o600):
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, writemode) as f: f.write(contents)
+    """make a file, perms are passed as octal"""
+    with open(path, writemode) as f:
+        f.write(contents)
     os.chmod(path, perms)
-    logging.info(f'Created file {path} {oct(perms)}')
+    logging.info(f'Created file {path} with permissions {oct(perms)}')
 
-def gen_password(length=22):
+def download(url, localfile, writemode='wb', perms=0o600):
+    """save a remote file, perms are passed as octal"""
+    logging.info(f'Downloading {url} as {localfile} with permissions {oct(perms)}')
+    u = urlparse(url)
+    if u.scheme == 'http':
+        conn = http.client.HTTPConnection(u.netloc)
+    else:
+        conn = http.client.HTTPSConnection(u.netloc)
+    conn.request('GET', u.path)
+    r = conn.getresponse()
+    with open(localfile, writemode) as f:
+        while True:
+            data = r.read(4096)
+            if data:
+                f.write(data)
+            else:
+                break
+    os.chmod(localfile, perms)
+    logging.info(f'Downloaded {url} as {localfile} with permissions {oct(perms)}')
+
+def gen_password(length=20):
+    """makes a random password"""
     chars = string.ascii_letters + string.digits
-    return ''.join(secrets.choice(chars) for _ in range(length))
+    return ''.join(secrets.choice(chars) for i in range(length))
 
 def run_command(cmd, cwd=None, env=CMD_ENV):
+    """runs a command, returns output"""
     logging.info(f'Running: {cmd}')
     try:
-        return subprocess.check_output(shlex.split(cmd), cwd=cwd, env=env)
+        result = subprocess.check_output(shlex.split(cmd), cwd=cwd, env=env)
     except subprocess.CalledProcessError as e:
-        out = getattr(e, 'output', b'').decode(errors='ignore')
-        logging.error(f'Command failed: {cmd}\n{out}')
-        sys.exit(e.returncode)
+        logging.debug(e.output)
+    return result
 
 def add_cronjob(cronjob):
-    homedir = os.path.expanduser('~'); tmpname = f'{homedir}/.tmp{gen_password(8)}'
-    # capture existing crontab if any
-    try:
-        existing = subprocess.check_output('crontab -l', shell=True, stderr=subprocess.STDOUT).decode()
-    except subprocess.CalledProcessError:
-        existing = ''
-    with open(tmpname, 'w') as tmp:
-        if existing.strip(): tmp.write(existing.strip() + '\n')
-        tmp.write(f'{cronjob}\n')
-    run_command(f'crontab {tmpname}')
-    os.remove(tmpname)
+    """appends a cron job to the user's crontab"""
+    homedir = os.path.expanduser('~')
+    tmpname = f'{homedir}/.tmp{gen_password()}'
+    tmp = open(tmpname, 'w')
+    subprocess.run('crontab -l'.split(),stdout=tmp)
+    tmp.write(f'{cronjob}\n')
+    tmp.close()
+    cmd = f'crontab {tmpname}'
+    doit = run_command(cmd)
+    cmd = run_command(f'rm -f {tmpname}')
     logging.info(f'Added cron job: {cronjob}')
 
-def wait_until_ready(api, app_uuid, timeout=300, interval=3):
-    start = time.time()
-    while True:
-        info = api.get(f'/app/read/{app_uuid}')
-        if info.get('ready') is True:
-            return info
-        if time.time() - start > timeout:
-            logging.error(f'App {app_uuid} not ready after {timeout}s')
-            sys.exit(1)
-        time.sleep(interval)
-
-def create_console_app(api, primary_app):
-    name = f"{primary_app['name']}{CONSOLE_SUFFIX}"
-    payload = [{
-        'name': name,
-        # CUS = Custom Proxied Port (a plain proxy-port style app that routes to a local port)
-        # This does NOT need an installer_url; we just need the port reservation + routing.
-        'type': 'CUS',
-        'osuser': primary_app['osuser'],
-        'server': primary_app['server'],
-    }]
-    resp = api.post('/app/create/', json.dumps(payload))
-    # Response formats have varied; handle a few shapes.
-    console_uuid = None
-    if isinstance(resp, list) and resp and isinstance(resp[0], dict) and resp[0].get('id'):
-        console_uuid = resp[0]['id']
-    elif isinstance(resp, dict):
-        if 'ids' in resp and resp['ids']:
-            console_uuid = resp['ids'][0]
-        elif 'results' in resp and resp['results'] and resp['results'][0].get('id'):
-            console_uuid = resp['results'][0]['id']
-        elif resp.get('id'):
-            console_uuid = resp['id']
-    if not console_uuid:
-        logging.error(f'Unexpected app/create response: {resp}')
-        sys.exit(1)
-    logging.info(f'Created console app {name} uuid={console_uuid}')
-    info = wait_until_ready(api, console_uuid)
-    return info
-
 def main():
-    p = argparse.ArgumentParser(description='Installs MinIO (Podman, dual-app routing) on Opalstack')
-    p.add_argument('-i', dest='app_uuid',   default=os.environ.get('UUID'))
-    p.add_argument('-n', dest='app_name',   default=os.environ.get('APPNAME'))
-    p.add_argument('-t', dest='opal_token', default=os.environ.get('OPAL_TOKEN'))
-    p.add_argument('-u', dest='opal_user',  default=os.environ.get('OPAL_USER'))
-    p.add_argument('-p', dest='opal_pass',  default=os.environ.get('OPAL_PASS'))
-    # override to reuse an existing console app if you already created one:
-    p.add_argument('--console-uuid', dest='console_uuid', default=os.environ.get('CONSOLE_UUID'))
-    a = p.parse_args()
+    """run it"""
 
+    # grab args from cmd or env
+    parser = argparse.ArgumentParser(
+        description='Installs MinIO (dual-app) on Opalstack account'
+    )
+    parser.add_argument('-i', dest='app_uuid', help='UUID of the base app', default=os.environ.get('UUID'))
+    parser.add_argument('-n', dest='app_name', help='name of the base app', default=os.environ.get('APPNAME'))
+    parser.add_argument('-t', dest='opal_token', help='API auth token', default=os.environ.get('OPAL_TOKEN'))
+    parser.add_argument('-u', dest='opal_user', help='Opalstack account name', default=os.environ.get('OPAL_USER'))
+    parser.add_argument('-p', dest='opal_password', help='Opalstack account password', default=os.environ.get('OPAL_PASS'))
+    args = parser.parse_args()
+
+    # init logging
     logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(levelname)s: %(message)s')
-    if not a.app_uuid:
-        logging.error('Missing UUID (-i)'); sys.exit(1)
 
-    api = OpalstackAPITool(API_HOST, API_BASE_URI, a.opal_token, a.opal_user, a.opal_pass)
+    # go!
+    logging.info(f'Started installation of MinIO app {args.app_name}')
+    api = OpalstackAPITool(API_HOST, API_BASE_URI, args.opal_token, args.opal_user, args.opal_password)
+    appinfo = api.get(f'/app/read/{args.app_uuid}')
+    appdir = f'/home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}'
+    api_port = int(appinfo['port'])
 
-    # Primary app (this installer is running under it)
-    app = api.get(f'/app/read/{a.app_uuid}')
-    if not app.get('name'):
-        logging.error('App not found'); sys.exit(1)
-    if not app.get('ready'):
-        app = wait_until_ready(api, a.app_uuid)
-
-    appdir = f"/home/{app['osuser_name']}/apps/{app['name']}"
-    port   = int(app['port'])
-
-    # Create or read the console app on same server/osuser
-    if a.console_uuid:
-        console = wait_until_ready(api, a.console_uuid)
+    # create a second app for the console on the same server/osuser (type CUS)
+    console_payload = json.dumps([{
+        "name": f"{appinfo['name']}-console",
+        "type": "CUS",
+        "osuser": appinfo["osuser"],
+        "server": appinfo["server"],
+    }])
+    logging.info("Creating console app for MinIO")
+    console_resp = api.post("/app/create/", console_payload)
+    # accept common shapes
+    if isinstance(console_resp, list) and len(console_resp) and console_resp[0].get('id'):
+        console_id = console_resp[0]['id']
+    elif isinstance(console_resp, dict) and console_resp.get('id'):
+        console_id = console_resp['id']
+    elif isinstance(console_resp, dict) and console_resp.get('ids'):
+        console_id = console_resp['ids'][0]
+    elif isinstance(console_resp, dict) and console_resp.get('results') and console_resp['results'][0].get('id'):
+        console_id = console_resp['results'][0]['id']
     else:
-        console = create_console_app(api, app)
-    console_port = int(console['port'])
+        logging.info(f'Unexpected app/create response: {console_resp}')
+        sys.exit()
 
-    # Prep dirs
-    run_command(f'mkdir -p {appdir}/data')
-    run_command(f'mkdir -p {appdir}/config')
+    consoleinfo = api.get(f'/app/read/{console_id}')
+    console_port = int(consoleinfo['port'])
 
-    # .env for MinIO
-    env = textwrap.dedent(f"""\
+    # prepare directories
+    cmd = f'mkdir -p {appdir}/data'
+    doit = run_command(cmd)
+    cmd = f'mkdir -p {appdir}/config'
+    doit = run_command(cmd)
+
+    # write .env
+    env = textwrap.dedent(f'''\
     # MinIO root credentials
-    MINIO_ROOT_USER="{app['name'][:12]}-admin"
+    MINIO_ROOT_USER="{appinfo['name'][:12]}-admin"
     MINIO_ROOT_PASSWORD="{gen_password(24)}"
-
-    # Optional URLs (set these after you assign domains):
+    # Optional after domains are assigned:
     # MINIO_SERVER_URL="https://objects.example.com"
     # MINIO_BROWSER_REDIRECT_URL="https://console.example.com"
-    """)
+    ''')
     create_file(f'{appdir}/.env', env, perms=0o600)
 
-    # Scripts
-    start = textwrap.dedent(f"""\
+    # start script (rootless podman with two routed ports)
+    start_script = textwrap.dedent(f'''\
     #!/bin/bash
     set -Eeuo pipefail
-    APP="{app['name']}"; APPDIR="{appdir}"
-    API_PORT="{port}"; CONSOLE_PORT="{console_port}"
-    IMG="{IMG}"
+    APP="{appinfo['name']}"
+    APPDIR="{appdir}"
+    API_PORT="{api_port}"
+    CONSOLE_PORT="{console_port}"
+    IMG="docker.io/minio/minio:latest"
     source "$APPDIR/.env"
 
     podman pull "$IMG" >/dev/null || true
     podman rm -f "$APP" >/dev/null 2>&1 || true
 
-    # bind API and Console to the 2 separate Opalstack-assigned ports
     podman run -d --name "$APP" \\
       -p 127.0.0.1:${{API_PORT}}:9000 \\
       -p 127.0.0.1:${{CONSOLE_PORT}}:9001 \\
@@ -177,71 +204,50 @@ def main():
       --label io.containers.autoupdate=registry \\
       "$IMG" server /data --console-address ":9001"
 
-    echo "Started MinIO for {app['name']} (API:127.0.0.1:{port} → 9000, Console:127.0.0.1:{console_port} → 9001)"
-    """)
+    echo "Started MinIO for {appinfo["name"]}. API on 127.0.0.1:{api_port}, Console on 127.0.0.1:{console_port}"
+    ''')
+    create_file(f'{appdir}/start', start_script, perms=0o700)
 
-    stop = f"""#!/bin/bash
-set -Eeuo pipefail
-podman rm -f {app['name']} >/dev/null 2>&1 || true
-echo "Stopped MinIO for {app['name']}"
-"""
+    # stop script
+    stop_script = textwrap.dedent(f'''\
+    #!/bin/bash
+    set -Eeuo pipefail
+    podman rm -f {appinfo["name"]} >/dev/null 2>&1 || true
+    echo "Stopped MinIO for {appinfo["name"]}."
+    ''')
+    create_file(f'{appdir}/stop', stop_script, perms=0o700)
 
-    logs = f"#!/bin/bash\npodman logs -f {app['name']}\n"
+    # cron (kick start periodically, like Ghost)
+    m = random.randint(0,9)
+    croncmd = f'0{m},1{m},2{m},3{m},4{m},5{m} * * * * {appdir}/start > /dev/null 2>&1'
+    cronjob = add_cronjob(croncmd)
 
-    update = f"""#!/bin/bash
-set -Eeuo pipefail
-"{appdir}/stop"
-"{appdir}/start"
-"""
+    # README
+    readme = textwrap.dedent(f'''\
+    # Opalstack MinIO README
 
-    check = f"""#!/bin/bash
-set -Eeuo pipefail
-curl -fsS "http://127.0.0.1:{port}/minio/health/live" >/dev/null || "{appdir}/start"
-"""
-
-    create_file(f'{appdir}/start',  start,  perms=0o700)
-    create_file(f'{appdir}/stop',   stop,   perms=0o700)
-    create_file(f'{appdir}/logs',   logs,   perms=0o700)
-    create_file(f'{appdir}/update', update, perms=0o700)
-    create_file(f'{appdir}/check',  check,  perms=0o700)
-
-    readme = textwrap.dedent(f"""\
-    # MinIO on Opalstack (dual-app)
-
-    API app:    {app['name']}  (port {port} → container 9000)
-    Console app:{console['name']} (port {console_port} → container 9001)
+    API app:    {appinfo["name"]}        (port {api_port} -> container 9000)
+    Console app: {consoleinfo["name"]}   (port {console_port} -> container 9001)
 
     Data:   {appdir}/data
     Config: {appdir}/config
     Env:    {appdir}/.env
 
-    Next steps:
-    - Assign your preferred domains:
-        * API app → e.g. objects.example.com
-        * Console app → e.g. console.example.com
-    - (Optional) then set MINIO_SERVER_URL / MINIO_BROWSER_REDIRECT_URL in .env and restart.
-    """)
-    create_file(f'{appdir}/README.txt', readme, perms=0o600)
+    After assigning domains, you may set MINIO_SERVER_URL and MINIO_BROWSER_REDIRECT_URL in .env and restart.
+    ''')
+    create_file(f'{appdir}/README', readme)
 
-    # Cron: self-heal + nightly update
-    m = random.randint(0,9)
-    add_cronjob(f'0{m},2{m},4{m} * * * * {appdir}/check > /dev/null 2>&1')
-    hh = random.randint(1,5); mm = random.randint(0,59)
-    add_cronjob(f'{mm} {hh} * * * {appdir}/update > /dev/null 2>&1')
+    # start once
+    doit = run_command(f'{appdir}/start')
 
-    # Start once
-    run_command(f'{appdir}/start')
+    # finished, push panel signals
+    msg = f'MinIO installed. API {appinfo["name"]}:127.0.0.1:{api_port} (9000), Console {consoleinfo["name"]}:127.0.0.1:{console_port} (9001).'
+    payload = json.dumps([{'id': args.app_uuid}, {'id': console_id}])
+    finished = api.post('/app/installed/', payload)
+    notice_payload = json.dumps([{'type': 'D', 'content': msg}])
+    notice_res = api.post('/notice/create/', notice_payload)
 
-    # ---- REQUIRED PANEL SIGNALS ----
-    msg = (f"MinIO installed. API app {app['name']} → 127.0.0.1:{port} (9000), "
-           f"Console app {console['name']} → 127.0.0.1:{console_port} (9001). "
-           f"Data: {appdir}/data, Config: {appdir}/config.")
-    # mark BOTH apps installed
-    api.post('/app/installed/', json.dumps([{'id': app['id']}, {'id': console['id']}]))
-
-    api.post('/notice/create/', json.dumps([{'type': 'D', 'content': msg}]))
-
-    logging.info(f'Completed installation: {msg}')
+    logging.info(f'Completed installation of MinIO app {args.app_name}')
 
 if __name__ == '__main__':
     main()
