@@ -7,7 +7,7 @@ CMD_ENV = {'PATH': '/usr/local/bin:/usr/bin:/bin', 'UMASK': '0002'}
 
 IMG = 'docker.io/louislam/uptime-kuma:1'
 
-# ----- API wrapper (Ghost style) -----
+# ----- API wrapper (Ghost/core style) -----
 class OpalstackAPITool():
     def __init__(self, host, base_uri, authtoken, user, password):
         self.host = host; self.base_uri = base_uri
@@ -15,20 +15,25 @@ class OpalstackAPITool():
             endpoint = self.base_uri + '/login/'
             payload = json.dumps({'username': user, 'password': password})
             conn = http.client.HTTPSConnection(self.host)
-            conn.request('POST', endpoint, payload, headers={'Content-type':'application/json'})
+            conn.request('POST', endpoint, payload, headers={'Content-type': 'application/json'})
             result = json.loads(conn.getresponse().read() or b'{}')
             if not result.get('token'):
                 logging.warning('Invalid username/password and no token, exiting.')
                 sys.exit(1)
             authtoken = result['token']
-        self.headers = {'Content-type':'application/json', 'Authorization': f'Token {authtoken}'}
+        self.headers = {'Content-type': 'application/json', 'Authorization': f'Token {authtoken}'}
     def get(self, endpoint):
         endpoint = self.base_uri + endpoint
         conn = http.client.HTTPSConnection(self.host)
         conn.request('GET', endpoint, headers=self.headers)
         return json.loads(conn.getresponse().read() or b'{}')
+    def post(self, endpoint, payload):
+        endpoint = self.base_uri + endpoint
+        conn = http.client.HTTPSConnection(self.host)
+        conn.request('POST', endpoint, payload, headers=self.headers)
+        return json.loads(conn.getresponse().read() or b'{}')
 
-# ----- helpers (Ghost style) -----
+# ----- helpers -----
 def create_file(path, contents, writemode='w', perms=0o600):
     with open(path, writemode) as f: f.write(contents)
     os.chmod(path, perms)
@@ -80,7 +85,7 @@ def main():
     # data directory
     run_command(f'mkdir -p {appdir}/data')
 
-    # .env (only TZ by default; Kuma stores its own secrets in /app/data)
+    # .env (Kuma stores its own creds inside /app/data via wizard)
     env = textwrap.dedent(f"""\
     TZ="America/Los_Angeles"
     """)
@@ -139,14 +144,28 @@ curl -fsS "http://127.0.0.1:{port}/" >/dev/null || "{appdir}/start"
     Port: {port} (maps to container 3001)
     Data: {appdir}/data
     Env:  {appdir}/.env
+
+    First run: visit your site route to create the admin account in the web UI.
     """)
     create_file(f'{appdir}/README.txt', readme, perms=0o600)
 
-    # Cron
+    # Cron (self-heal + nightly restart/update)
     m = random.randint(0,9)
     add_cronjob(f'0{m},2{m},4{m} * * * * {appdir}/check > /dev/null 2>&1')
     hh = random.randint(1,5); mm = random.randint(0,59)
     add_cronjob(f'{mm} {hh} * * * {appdir}/update > /dev/null 2>&1')
+
+    # Start once
+    run_command(f'{appdir}/start')
+
+    # ---- REQUIRED PANEL SIGNALS ----
+    msg = f'Uptime Kuma installed on 127.0.0.1:{port}. Open via your site route; create the admin user on first visit. Data: {appdir}/data'
+    installed_payload = json.dumps([{'id': a.app_uuid}])
+    api.post('/app/installed/', installed_payload)  # marks app as installed
+    notice_payload = json.dumps([{'type': 'D', 'content': msg}])
+    api.post('/notice/create/', notice_payload)     # dashboard notice
+
+    logging.info(f'Completed installation of Uptime Kuma app {a.app_name} - {msg}')
 
 if __name__ == '__main__':
     main()
