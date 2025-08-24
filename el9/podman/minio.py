@@ -1,236 +1,175 @@
-#!/usr/bin/env python3
-# Opalstack MinIO installer (rootless Podman) — app-only, dual port via 2 apps
-# - Uses invoking app (UUID) as S3 endpoint (9000 -> base port)
-# - Ensures/uses a companion console app (9001 -> console port)
-# - No site/domain creation here.
+#!/usr/local/bin/python3.11
+import argparse, sys, logging, os, http.client, json, textwrap, secrets, string, subprocess, shlex, random
 
-import argparse, os, sys, json, http.client, logging, time, subprocess, shlex, secrets, string, textwrap, random, re
+API_HOST = (os.environ.get('API_URL') or 'https://my.opalstack.com').strip('https://').strip('http://')
+API_BASE_URI = '/api/v1'
+CMD_ENV = {'PATH': '/usr/local/bin:/usr/bin:/bin', 'UMASK': '0002'}
 
-API_HOST = os.environ.get('API_URL', '').strip('https://').strip('http://') or 'my.opalstack.com'
-API_BASE = '/api/v1'
-IMAGE    = 'docker.io/minio/minio:latest'
-MC_IMAGE = 'docker.io/minio/mc:latest'
+IMG = 'docker.io/minio/minio:latest'
 
-def sh(cmd, check=False, quiet=False):
-    if not quiet: logging.info("$ %s", cmd)
-    r = subprocess.run(shlex.split(cmd), capture_output=True, text=True)
-    if check and r.returncode != 0:
-        logging.error(r.stderr.strip()); sys.exit(r.returncode)
-    return r
-
-def write(path, content, mode=0o600):
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, 'w') as f: f.write(content)
-    os.chmod(path, mode); logging.info("write %s (%s)", path, oct(mode))
-
-def rand(n=24):
-    alphabet = string.ascii_letters + string.digits
-    return ''.join(secrets.choice(alphabet) for _ in range(n))
-
-def sanitize(s):
-    s = s.lower()
-    s = re.sub(r'[^a-z0-9\-]+', '-', s).strip('-')
-    return s or 'minio'
-
-class API:
-    def __init__(self, host, base='/api/v1', token=None, user=None, password=None):
-        self.host, self.base = host, base
-        if not token:
-            conn = http.client.HTTPSConnection(self.host)
+# ----- API wrapper (Ghost style) -----
+class OpalstackAPITool():
+    def __init__(self, host, base_uri, authtoken, user, password):
+        self.host = host; self.base_uri = base_uri
+        if not authtoken:
+            endpoint = self.base_uri + '/login/'
             payload = json.dumps({'username': user, 'password': password})
-            conn.request('POST', self.base + '/login/', payload, headers={'Content-type': 'application/json'})
-            resp = conn.getresponse(); data = json.loads(resp.read() or b'{}')
-            token = data.get('token')
-            if not token: logging.error('Auth failed; set OPAL_TOKEN or OPAL_USER/OPAL_PASS'); sys.exit(1)
-        self.h = {'Content-type': 'application/json', 'Authorization': f'Token {token}'}
-
-    def get(self, path):
+            conn = http.client.HTTPSConnection(self.host)
+            conn.request('POST', endpoint, payload, headers={'Content-type':'application/json'})
+            result = json.loads(conn.getresponse().read() or b'{}')
+            if not result.get('token'):
+                logging.warning('Invalid username/password and no token, exiting.')
+                sys.exit(1)
+            authtoken = result['token']
+        self.headers = {'Content-type':'application/json', 'Authorization': f'Token {authtoken}'}
+    def get(self, endpoint):
+        endpoint = self.base_uri + endpoint
         conn = http.client.HTTPSConnection(self.host)
-        conn.request('GET', self.base + path, headers=self.h)
+        conn.request('GET', endpoint, headers=self.headers)
         return json.loads(conn.getresponse().read() or b'{}')
 
-    def post(self, path, payload):
-        conn = http.client.HTTPSConnection(self.host)
-        conn.request('POST', self.base + path, json.dumps(payload), headers=self.h)
-        return json.loads(conn.getresponse().read() or b'{}')
+# ----- helpers (Ghost style) -----
+def create_file(path, contents, writemode='w', perms=0o600):
+    with open(path, writemode) as f: f.write(contents)
+    os.chmod(path, perms)
+    logging.info(f'Created file {path} {oct(perms)}')
 
-    def wait_ready(self, app_id, timeout=180):
-        t0 = time.time()
-        while time.time() - t0 < timeout:
-            a = self.get(f'/app/read/{app_id}')
-            if a.get('status') == 'ready' and a.get('port'): return a
-            time.sleep(2.5)
-        return self.get(f'/app/read/{app_id}')
+def gen_password(length=22):
+    chars = string.ascii_letters + string.digits
+    return ''.join(secrets.choice(chars) for _ in range(length))
+
+def run_command(cmd, cwd=None, env=CMD_ENV):
+    logging.info(f'Running: {cmd}')
+    try:
+        return subprocess.check_output(shlex.split(cmd), cwd=cwd, env=env)
+    except subprocess.CalledProcessError as e:
+        logging.debug(getattr(e, 'output', b''))
+        sys.exit(e.returncode)
+
+def add_cronjob(cronjob):
+    homedir = os.path.expanduser('~'); tmpname = f'{homedir}/.tmp{gen_password(8)}'
+    with open(tmpname, 'w') as tmp:
+        subprocess.run('crontab -l'.split(), stdout=tmp)
+        tmp.write(f'{cronjob}\n')
+    run_command(f'crontab {tmpname}')
+    run_command(f'rm -f {tmpname}')
+    logging.info(f'Added cron job: {cronjob}')
 
 def main():
-    ap = argparse.ArgumentParser(description='Install MinIO (S3+Console) via two apps; no sites.')
-    ap.add_argument('-i', '--uuid', dest='app_uuid', default=os.environ.get('UUID'))
-    ap.add_argument('-n', '--name', dest='app_name', default=os.environ.get('APPNAME'))
-    ap.add_argument('-t', '--token', dest='opal_token', default=os.environ.get('OPAL_TOKEN'))
-    ap.add_argument('-u', '--user',  dest='opal_user',  default=os.environ.get('OPAL_USER'))
-    ap.add_argument('-p', '--pass',  dest='opal_pass',  default=os.environ.get('OPAL_PASS'))
-    ap.add_argument('--console-uuid', dest='console_uuid', default=os.environ.get('CONSOLE_APP_UUID'))
-    args = ap.parse_args()
+    p = argparse.ArgumentParser(description='Installs MinIO (Podman) on Opalstack')
+    p.add_argument('-i', dest='app_uuid',   default=os.environ.get('UUID'))
+    p.add_argument('-n', dest='app_name',   default=os.environ.get('APPNAME'))
+    p.add_argument('-t', dest='opal_token', default=os.environ.get('OPAL_TOKEN'))
+    p.add_argument('-u', dest='opal_user',  default=os.environ.get('OPAL_USER'))
+    p.add_argument('-p', dest='opal_pass',  default=os.environ.get('OPAL_PASS'))
+    # optional: let operator choose console port (defaults to PORT+1)
+    p.add_argument('--console-port', dest='console_port', default=os.environ.get('CONSOLE_PORT'))
+    a = p.parse_args()
 
     logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(levelname)s: %(message)s')
+    if not a.app_uuid:
+        logging.error('Missing UUID (-i)')
+        sys.exit(1)
 
-    if not args.app_uuid: logging.error('Missing app UUID (-i/--uuid or $UUID)'); sys.exit(1)
-    if not sh('which podman', quiet=True).stdout.strip(): logging.error('podman not found'); sys.exit(1)
+    api = OpalstackAPITool(API_HOST, API_BASE_URI, a.opal_token, a.opal_user, a.opal_pass)
+    app = api.get(f'/app/read/{a.app_uuid}')
+    if not app.get('name'):
+        logging.error('App not found'); sys.exit(1)
 
-    api = API(API_HOST, API_BASE, args.opal_token, args.opal_user, args.opal_pass)
+    appdir = f"/home/{app['osuser_name']}/apps/{app['name']}"
+    port   = int(app['port'])
 
-    # Base app -> S3 port
-    base = api.get(f'/app/read/{args.app_uuid}')
-    if not base.get('name'): logging.error('Base app not found'); sys.exit(1)
-    base_name = sanitize(base['name'])
-    port_s3   = base['port']
-    osuser    = base.get('osuser_name') or base.get('osuser', '')
-    if not (base_name and port_s3 and osuser): logging.error('Base app missing name/port/osuser'); sys.exit(1)
+    # Prepare directories
+    run_command(f'mkdir -p {appdir}/data')
+    run_command(f'mkdir -p {appdir}/config')
 
-    # Resolve OSUser id
-    osusers = api.get('/osuser/list/')
-    osuser_id = next((u['id'] for u in osusers if u.get('name') == osuser), None)
-    if not osuser_id: logging.error('OSUser %s not found', osuser); sys.exit(1)
+    # Console port: by default, use PORT+1 (will be bound to 127.0.0.1 too)
+    console_port = int(a.console_port) if a.console_port else port + 1
 
-    # Console app -> 9001 port
-    console = None
-    if args.console_uuid:
-        console = api.get(f'/app/read/{args.console_uuid}')
-        if console.get('osuser_name') != osuser:
-            logging.error('Console app OSUser mismatch'); sys.exit(1)
-    else:
-        # find by name or create
-        apps = api.get('/app/list/')
-        wanted_name = sanitize(f'{base_name}-console')
-        console = next((a for a in apps if a.get('name') == wanted_name and a.get('osuser_name') == osuser), None)
-        if not console:
-            created = api.post('/app/create/', [{
-                'name': wanted_name,
-                'osuser': osuser_id,
-                'type': 'CUS',   # proxied port app
-            }])
-            if not isinstance(created, list) or not created:
-                logging.error('Console app create failed: %s', created); sys.exit(1)
-            console = api.wait_ready(created[0]['id'], timeout=180)
+    # .env
+    env = textwrap.dedent(f"""\
+    # MinIO root credentials
+    MINIO_ROOT_USER="{app['name'][:12]}-admin"
+    MINIO_ROOT_PASSWORD="{gen_password(24)}"
 
-    port_console = console.get('port')
-    console_name = console.get('name')
-    if not port_console: logging.error('Console app has no port'); sys.exit(1)
-
-    # Paths
-    homedir = f"/home/{osuser}"
-    appdir  = f"{homedir}/apps/{base_name}"
-    os.makedirs(f"{appdir}/data", exist_ok=True)
-    os.makedirs(f"{appdir}/tmp",  exist_ok=True)
-
-    # .env with root creds
-    env_path = f"{appdir}/.env"
-    if not os.path.exists(env_path):
-        root_user = f"minio-{rand(8)}"
-        root_pass = rand(32)
-        write(env_path, textwrap.dedent(f"""\
-            MINIO_ROOT_USER="{root_user}"
-            MINIO_ROOT_PASSWORD="{root_pass}"
-            # Optional for presigned URLs behind proxy:
-            # MINIO_SERVER_URL="https://s3.example.com"
-        """), 0o600)
+    # Optional URLs (set these when wiring your proxy):
+    # MINIO_SERVER_URL="https://objects.example.com"
+    # MINIO_BROWSER_REDIRECT_URL="https://console.example.com"
+    """)
+    create_file(f'{appdir}/.env', env, perms=0o600)
 
     # Scripts
     start = textwrap.dedent(f"""\
-        #!/bin/bash
-        set -Eeuo pipefail
-        APP="{base_name}"
-        APPDIR="$HOME/apps/$APP"
-        IMG="{IMAGE}"
-        PORT_S3="{port_s3}"
-        PORT_CONSOLE="{port_console}"
-        source "$APPDIR/.env"
-        mkdir -p "$APPDIR/data" "$APPDIR/tmp"
-        podman pull "$IMG" >/dev/null || true
-        podman rm -f "$APP" >/dev/null 2>&1 || true
-        podman run -d --name "$APP" \\
-          -p 127.0.0.1:${{PORT_S3}}:9000 \\
-          -p 127.0.0.1:${{PORT_CONSOLE}}:9001 \\
-          -v "$APPDIR/data:/data:Z" \\
-          --env-file "$APPDIR/.env" \\
-          --label io.containers.autoupdate=registry \\
-          "$IMG" server /data --console-address ":9001"
+    #!/bin/bash
+    set -Eeuo pipefail
+    APP="{app['name']}"; APPDIR="{appdir}"
+    PORT="{port}"; CONSOLE_PORT="{console_port}"
+    IMG="{IMG}"
+    source "$APPDIR/.env"
+
+    podman pull "$IMG" >/dev/null || true
+    podman rm -f "$APP" >/dev/null 2>&1 || true
+
+    # Note: exposes BOTH ports on 127.0.0.1 (panel routes one; the other is for SSH tunnel or a second App if you make one)
+    podman run -d --name "$APP" \\
+      -p 127.0.0.1:${{PORT}}:9000 \\
+      -p 127.0.0.1:${{CONSOLE_PORT}}:9001 \\
+      -v "$APPDIR/data:/data" \\
+      -v "$APPDIR/config:/root/.minio" \\
+      --env-file "$APPDIR/.env" \\
+      --label io.containers.autoupdate=registry \\
+      "$IMG" server /data --console-address ":9001"
+
+    echo "Started MinIO for {app['name']} (API on 127.0.0.1:{port}, Console on 127.0.0.1:{console_port})"
     """)
+
     stop = f"""#!/bin/bash
 set -Eeuo pipefail
-podman stop {base_name} >/dev/null 2>&1 || true
-podman rm   {base_name} >/dev/null 2>&1 || true
-echo "stopped {base_name}"
+podman rm -f {app['name']} >/dev/null 2>&1 || true
+echo "Stopped MinIO for {app['name']}"
 """
-    logs = f"#!/bin/bash\npodman logs -f {base_name}\n"
-    update = textwrap.dedent(f"""\
-        #!/bin/bash
-        set -Eeuo pipefail
-        APPDIR="$HOME/apps/{base_name}"
-        podman pull {IMAGE}
-        "$APPDIR/stop"
-        "$APPDIR/start"
-    """)
-    check = textwrap.dedent(f"""\
-        #!/bin/bash
-        set -Eeuo pipefail
-        if ! curl -fsS "http://127.0.0.1:{port_s3}/minio/health/live" >/dev/null; then
-          echo "minio not healthy; restarting..."
-          "$HOME/apps/{base_name}/start"
-        fi
-    """)
-    setup = textwrap.dedent(f"""\
-        #!/bin/bash
-        set -Eeuo pipefail
-        APP="{base_name}"
-        APPDIR="$HOME/apps/$APP"
-        PORT_S3="{port_s3}"
-        MC_IMG="{MC_IMAGE}"
-        source "$APPDIR/.env"
-        for i in {{1..30}}; do
-          curl -fsS "http://127.0.0.1:${{PORT_S3}}/minio/health/live" >/dev/null && break
-          sleep 1
-        done
-        podman pull "$MC_IMG" >/dev/null || true
-        podman run --rm --name "mc-$APP" --net host "$MC_IMG" \\
-          mc alias set local "http://127.0.0.1:{port_s3}" "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD"
-        echo "Alias 'local' set. Example: podman run --rm --net host {MC_IMAGE} mc ls local"
-        echo "Console app: {console_name} (port {port_console})"
-    """)
+
+    logs = f"#!/bin/bash\npodman logs -f {app['name']}\n"
+
+    update = f"""#!/bin/bash
+set -Eeuo pipefail
+"{appdir}/stop"
+"{appdir}/start"
+"""
+
+    # MinIO health endpoint (API port)
+    check = f"""#!/bin/bash
+set -Eeuo pipefail
+curl -fsS "http://127.0.0.1:{port}/minio/health/live" >/dev/null || "{appdir}/start"
+"""
+
+    create_file(f'{appdir}/start',  start,  perms=0o700)
+    create_file(f'{appdir}/stop',   stop,   perms=0o700)
+    create_file(f'{appdir}/logs',   logs,   perms=0o700)
+    create_file(f'{appdir}/update', update, perms=0o700)
+    create_file(f'{appdir}/check',  check,  perms=0o700)
 
     readme = textwrap.dedent(f"""\
-        MinIO (rootless Podman) — app-only, dual app
+    # MinIO on Opalstack
 
-        Apps
-        - S3 API app:   {base_name}       port {port_s3}   -> container :9000
-        - Console app:  {console_name}    port {port_console} -> container :9001
+    App: {app['name']}
+    API Port: {port}        (mapped to container 9000)
+    Console Port: {console_port} (mapped to container 9001)
+    Data:  {appdir}/data
+    Config:{appdir}/config
+    Env:   {appdir}/.env
 
-        Files
-        - Dir:      {appdir}
-        - Data:     {appdir}/data  (-> /data)
-        - Scripts:  start | stop | logs | update | check | setup
-        - Creds:    {appdir}/.env (MINIO_ROOT_USER / MINIO_ROOT_PASSWORD)
-
-        Health: GET /minio/health/live on S3 port.
-        Notes: This installer manages **apps only**. Domains/sites/proxy are handled elsewhere.
+    Notes:
+    - Only the *app-assigned* port ({port}) is routed by the panel. If you want to expose the console too,
+      either create a second port app and map it to {console_port}, or use SSH tunneling.
     """)
+    create_file(f'{appdir}/README.txt', readme, perms=0o600)
 
-    write(f"{appdir}/start",  start,  0o700)
-    write(f"{appdir}/stop",   stop,   0o700)
-    write(f"{appdir}/logs",   logs,   0o700)
-    write(f"{appdir}/update", update, 0o700)
-    write(f"{appdir}/check",  check,  0o700)
-    write(f"{appdir}/setup",  setup,  0o700)
-    write(f"{appdir}/README.txt", readme, 0o600)
-
-    # Cron: self-heal + nightly update
+    # Cron: self-heal + nightly update (randomized minutes)
     m = random.randint(0,9)
-    sh(f'(crontab -l 2>/dev/null; echo "0{m},1{m},2{m},3{m},4{m},5{m} * * * * {appdir}/check >/dev/null 2>&1") | crontab -')
+    add_cronjob(f'0{m},2{m},4{m} * * * * {appdir}/check > /dev/null 2>&1')
     hh = random.randint(1,5); mm = random.randint(0,59)
-    sh(f'(crontab -l 2>/dev/null; echo "{mm} {hh} * * * {appdir}/update >/dev/null 2>&1") | crontab -')
-
-    logging.info('Done. S3 app=%s (port %s)  console app=%s (port %s)',
-                 base_name, port_s3, console_name, port_console)
+    add_cronjob(f'{mm} {hh} * * * {appdir}/update > /dev/null 2>&1')
 
 if __name__ == '__main__':
     main()
