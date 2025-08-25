@@ -25,7 +25,8 @@ Default images:
   Postgres:    docker.io/library/postgres:16-alpine
 """
 
-import argparse, sys, os, json, logging, http.client, subprocess, shlex, secrets, string, textwrap, random
+import argparse, sys, os, json, logging, http.client, subprocess, shlex, secrets, string, textwrap, random, time
+
 
 # ---------- Config ----------
 API_URL = (
@@ -481,16 +482,32 @@ def main():
 
     # DO NOT start/pull here (user does that later)
 
-    # panel notice
-    api.post('/app/installed/', json.dumps([{'id': args.uuid}]))
-    api.post('/notice/create/', json.dumps([{
-        'type':'M',
-        'content': (
-            f'Discourse prepared for app {appname}. SSH and run {appdir}/start when ready. '
-            f'Start is ultra-verbose and shows asset progress and health checks. '
-            f'Initial admin: {admin_user}/{admin_pass} ({admin_email}).'
-        )
-    }]))
+    # give the panel a moment before notifying it (avoids racey 4xx)
+    time.sleep(10)
+
+    # /app/installed/ (retry once if transient)
+    try:
+        api.post('/app/installed/', json.dumps([{'id': args.uuid}]))
+    except Exception as e:
+        logging.warning(f'/app/installed/ failed once: {e}; retrying in 3s')
+        time.sleep(3)
+        try:
+            api.post('/app/installed/', json.dumps([{'id': args.uuid}]))
+        except Exception as e2:
+            logging.error(f'/app/installed/ failed after retry: {e2}')
+
+    # panel notice (don’t fail installer if this flakes)
+    try:
+        api.post('/notice/create/', json.dumps([{
+            'type':'M',
+            'content': (
+                f'Discourse prepared for app {appname}. SSH and run {appdir}/start when ready. '
+                f'Start is ultra-verbose and shows asset progress and health checks. '
+                f'Initial admin: {admin_user}/{admin_pass} ({admin_email}).'
+            )
+        }]))
+    except Exception as e:
+        logging.warning(f'/notice/create/ failed: {e}')
 
     logging.info('Install complete (no long-running tasks).')
 
