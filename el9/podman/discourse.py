@@ -2,9 +2,15 @@
 # -*- coding: utf-8 -*-
 """
 Discourse on Opalstack (EL9 + Podman) — one-click installer
-Lifecycle matches Mastodon/Ghost/WordPress SOP:
-- Installer: writes files, cron, README, posts notice. **Does not start/pull**.
+SOP (like Mastodon/Ghost/WordPress):
+- Installer: writes files, cron, README, notice. **Does not start/pull**.
 - User later runs: start/stop/update/check/diagnose (README explains).
+
+Fixes included:
+- Rootless cgroups: export CONTAINERS_CGROUP_MANAGER=cgroupfs in scripts
+- Use --cgroups=disabled on podman run
+- PG perms via `podman unshare` (no host chmod that causes EPERM)
+- f-string escaping for curl -w "%{http_code}" and podman Go templates
 """
 
 import argparse, sys, os, json, logging, http.client, subprocess, shlex, secrets, string, textwrap, random
@@ -99,7 +105,6 @@ def main():
     port    = int(app['port'])
     appdir  = f'/home/{osuser}/apps/{appname}'
     logdir  = f'/home/{osuser}/logs/apps/{appname}'
-    podname = f'{appname}-pod'
 
     logging.info(f'Preparing Discourse for app "{appname}"')
 
@@ -108,7 +113,7 @@ def main():
     sh(f'mkdir -p {appdir}/pgdata')
     sh(f'mkdir -p {logdir}')
 
-    # ---- creds/env (no external DB; self-contained) ----
+    # ---- creds/env (self-contained DB) ----
     db_user = f"disc_{args.uuid[:8]}".lower()
     db_name = db_user
     db_pass = pw(24)
@@ -140,10 +145,12 @@ def main():
     """)
     write(f'{appdir}/.env', env, 0o600)
 
-    # ---- scripts (no long waits, no pulls in installer) ----
+    # ---- scripts (no pulls/long waits) ----
     start = textwrap.dedent(f"""\
     #!/bin/bash
     set -Eeuo pipefail
+    export CONTAINERS_CGROUP_MANAGER=cgroupfs
+
     APP="{appname}"
     POD="$APP-pod"
     APPDIR="{appdir}"
@@ -159,7 +166,7 @@ def main():
     echo "[start] ensure dirs + perms"
     mkdir -p "$LOGDIR" "$APPDIR/pgdata" "$APPDIR/data"
     chmod 0777 "$LOGDIR" || true
-    chmod 0770 "$APPDIR/pgdata" || true
+    # do perms inside userns; avoid host chmod EPERM
     podman unshare chown -R 999:999 "$APPDIR/pgdata" || true
     podman unshare chmod -R 0770 "$APPDIR/pgdata" || true
 
@@ -168,7 +175,7 @@ def main():
 
     echo "[start] starting postgres..."
     podman rm -f "$APP-postgres" >/dev/null 2>&1 || true
-    podman run -d --name "$APP-postgres" --pod "$POD" \\
+    podman run --cgroups=disabled -d --name "$APP-postgres" --pod "$POD" \\
       -e POSTGRES_USER="$DB_USER" \\
       -e POSTGRES_PASSWORD="$DB_PASS" \\
       -e POSTGRES_DB="$DB_NAME" \\
@@ -177,11 +184,11 @@ def main():
 
     echo "[start] starting redis..."
     podman rm -f "$APP-redis" >/dev/null 2>&1 || true
-    podman run -d --name "$APP-redis" --pod "$POD" "$IMG_REDIS" >/dev/null
+    podman run --cgroups=disabled -d --name "$APP-redis" --pod "$POD" "$IMG_REDIS" >/dev/null
 
     echo "[start] starting discourse (web+sidekiq)..."
     podman rm -f "$APP" >/dev/null 2>&1 || true
-    podman run -d --name "$APP" --pod "$POD" \\
+    podman run --cgroups=disabled -d --name "$APP" --pod "$POD" \\
       -v "$APPDIR/data:/data" \\
       -v "$LOGDIR:/data/logs" \\
       --env-file "$APPDIR/.env" \\
@@ -194,6 +201,7 @@ def main():
     stop = textwrap.dedent(f"""\
     #!/bin/bash
     set -Eeuo pipefail
+    export CONTAINERS_CGROUP_MANAGER=cgroupfs
     APP="{appname}"
     POD="$APP-pod"
     podman rm -f "$APP" "$APP-redis" "$APP-postgres" >/dev/null 2>&1 || true
@@ -204,6 +212,7 @@ def main():
     update = textwrap.dedent(f"""\
     #!/bin/bash
     set -Eeuo pipefail
+    export CONTAINERS_CGROUP_MANAGER=cgroupfs
     "{appdir}/stop" || true
     "{appdir}/start"
     """)
@@ -211,6 +220,7 @@ def main():
     check = textwrap.dedent(f"""\
     #!/bin/bash
     set -Eeuo pipefail
+    export CONTAINERS_CGROUP_MANAGER=cgroupfs
     APP="{appname}"
     need=0
     for c in "$APP-postgres" "$APP-redis" "$APP"; do
@@ -226,12 +236,14 @@ def main():
     logs_sh = textwrap.dedent(f"""\
     #!/bin/bash
     set -Eeuo pipefail
+    export CONTAINERS_CGROUP_MANAGER=cgroupfs
     tail -F "{logdir}/discourse.log" "{logdir}/unicorn.log" "{logdir}/unicorn-error.log" "{logdir}/sidekiq.log" 2>/dev/null
     """)
 
     diagnose = textwrap.dedent(f"""\
     #!/bin/bash
     set -Eeuo pipefail
+    export CONTAINERS_CGROUP_MANAGER=cgroupfs
     APP="{appname}"
     PORT="{port}"
     LOGDIR="{logdir}"
@@ -242,9 +254,9 @@ def main():
 
     echo -e "\\n=== HOST PORT CHECK ==="
     if command -v curl >/dev/null; then
-    curl -sS -o /dev/null -w "HTTP %{{http_code}}\\n" "http://127.0.0.1:${{PORT}}/" || true
+      curl -sS -o /dev/null -w "HTTP %{{http_code}}\\n" "http://127.0.0.1:${{PORT}}/" || true
     else
-    echo "curl not available"
+      echo "curl not available"
     fi
 
     echo -e "\\n=== REDIS PING ==="
@@ -256,16 +268,17 @@ def main():
     echo -e "\\n=== LAST LOGS ==="
     ls -lh "$LOGDIR" | sed 's/^/    /'
     for f in "$LOGDIR"/discourse.log "$LOGDIR"/unicorn*.log "$LOGDIR"/sidekiq.log; do
-    echo "--- $f"
-    tail -n 100 "$f" 2>/dev/null || true
-    echo
+      echo "--- $f"
+      tail -n 100 "$f" 2>/dev/null || true
+      echo
     done
     """)
 
-    # optional: manual DB extension kick (user-run; safe to skip)
+    # optional helpers (user-run)
     dbext = textwrap.dedent(f"""\
     #!/bin/bash
     set -Eeuo pipefail
+    export CONTAINERS_CGROUP_MANAGER=cgroupfs
     APP="{appname}"
     echo "[dbext] creating hstore/pg_trgm (requires postgres up)..."
     for i in $(seq 1 120); do
@@ -282,6 +295,7 @@ def main():
     migrate = textwrap.dedent(f"""\
     #!/bin/bash
     set -Eeuo pipefail
+    export CONTAINERS_CGROUP_MANAGER=cgroupfs
     APP="{appname}"
     echo "[migrate] running rails db:migrate + assets:precompile (inside container)..."
     podman exec "$APP" bash -lc 'cd /app && RAILS_ENV=production bundle exec rake db:migrate assets:precompile' || true
@@ -298,7 +312,7 @@ def main():
     **Logs:** {logdir}/ (discourse.log, unicorn*.log, sidekiq.log)
 
     ## Finish Setup (run later via SSH)
-    1. Start services (will pull images on first run and may take a few minutes on first boot):
+    1. Start services (first run pulls images and initializes, can take a few minutes):
        ```
        {appdir}/start
        ```
@@ -306,7 +320,6 @@ def main():
        ```
        {appdir}/dbext
        ```
-       Discourse generally enables required extensions automatically; this is provided just in case.
     3. Watch:
        ```
        {appdir}/diagnose
@@ -325,10 +338,7 @@ def main():
     - Diagnose: {appdir}/diagnose
     - Logs:     {appdir}/logs
     - DB Ext:   {appdir}/dbext
-    - Migrate:  {appdir}/migrate (optional manual rake; image usually handles on start)
-
-    ## Credentials
-    - Admin: `{admin_user}` / `{admin_pass}` (email: `{admin_email}`) — change in the UI after first login.
+    - Migrate:  {appdir}/migrate (optional manual rake)
     """)
 
     # write files
