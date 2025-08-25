@@ -238,13 +238,13 @@ def main():
 
     echo "=== POD/CONTAINERS ==="
     podman pod ps
-    podman ps --format "table {{.Names}}\\t{{.Status}}\\t{{.Image}}\\t{{.Ports}}"
+    podman ps --format "table {{{{.Names}}}}\\t{{{{.Status}}}}\\t{{{{.Image}}}}\\t{{{{.Ports}}}}"
 
     echo -e "\\n=== HOST PORT CHECK ==="
     if command -v curl >/dev/null; then
-      curl -sS -o /dev/null -w "HTTP %{http_code}\\n" "http://127.0.0.1:${{PORT}}/" || true
+    curl -sS -o /dev/null -w "HTTP %{{http_code}}\\n" "http://127.0.0.1:${{PORT}}/" || true
     else
-      echo "curl not available"
+    echo "curl not available"
     fi
 
     echo -e "\\n=== REDIS PING ==="
@@ -256,9 +256,9 @@ def main():
     echo -e "\\n=== LAST LOGS ==="
     ls -lh "$LOGDIR" | sed 's/^/    /'
     for f in "$LOGDIR"/discourse.log "$LOGDIR"/unicorn*.log "$LOGDIR"/sidekiq.log; do
-      echo "--- $f"
-      tail -n 100 "$f" 2>/dev/null || true
-      echo
+    echo "--- $f"
+    tail -n 100 "$f" 2>/dev/null || true
+    echo
     done
     """)
 
