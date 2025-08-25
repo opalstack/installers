@@ -1,459 +1,364 @@
 #!/usr/bin/python3
 """
-Opalstack Discourse (Podman, tiredofit) — robust installer with debug/probes.
-
-What this does:
-- Auth to panel API (token or username/password)
-- Create PG user+db on the SAME server; grant RW and wait until 'ready'
-- Write .env with DB/Redis/LOGS and auto-detected PGSSLMODE (prefer/require)
-- Create pod (redis + web/sidekiq), fix log bind perms, start services
-- Wait for Redis PING and Unicorn to listen on :3000
-- Install helper scripts: start/stop/update/check/logs/diagnose
-- Add cron for periodic health and nightly update
-
-Tested assumptions:
-- rootless podman; host Postgres reachable from containers via host.containers.internal
-- tiredofit/discourse image bundles unicorn + sidekiq in one container
+Discourse on Opalstack (Podman, self-contained)
+- Pod layout: [postgres, redis, discourse] in a single pod
+- Avoids host Postgres, no pg_hba/SSL headaches
+- Verbose logging and a `diagnose` helper
 """
-import argparse, sys, logging, os, http.client, json, textwrap, secrets, string, subprocess, shlex, random, time
 
-API_HOST     = (os.environ.get('API_URL') or 'https://my.opalstack.com').strip('https://').strip('http://')
+import argparse, sys, os, json, time, logging, http.client, subprocess, shlex, secrets, string, textwrap, random
+
+API_HOST = (os.environ.get('API_URL') or 'https://my.opalstack.com').replace('https://', '').replace('http://', '')
 API_BASE_URI = '/api/v1'
-CMD_ENV      = {'PATH': '/usr/local/bin:/usr/bin:/bin', 'UMASK': '0002'}
+CMD_ENV = {'PATH': '/usr/local/bin:/usr/bin:/bin', 'UMASK': '0002'}
 
-IMG_WEB      = 'docker.io/tiredofit/discourse:latest'
-IMG_REDIS    = 'docker.io/library/redis:7-alpine'
-IMG_PSQLCLI  = 'docker.io/library/postgres:16-alpine'
+# Images
+IMG_WEB     = 'docker.io/tiredofit/discourse:latest'   # web + sidekiq in one
+IMG_REDIS   = 'docker.io/library/redis:7-alpine'
+IMG_POSTGIS = 'docker.io/library/postgres:16-alpine'   # postgresql (kept lean)
 
-# ---------- HTTP/Panel API ----------
-class OpalstackAPITool:
-    def __init__(self, host, base_uri, authtoken, user, password):
-        self.host, self.base_uri = host, base_uri
-        if not authtoken:
-            endpoint = self.base_uri + '/login/'
-            payload = json.dumps({'username': user, 'password': password})
+# ------------- API -------------
+class OpalAPI:
+    def __init__(self, host, base_uri, token=None, user=None, password=None):
+        self.host, self.base = host, base_uri
+        if not token:
             conn = http.client.HTTPSConnection(self.host)
-            conn.request('POST', endpoint, payload, headers={'Content-type':'application/json'})
-            resp = conn.getresponse(); raw = resp.read() or b'{}'
-            if resp.status != 200:
-                logging.error(f'Login failed HTTP {resp.status}')
-                sys.exit(1)
-            result = json.loads(raw)
-            if not result.get('token'):
-                logging.error('Invalid username/password and no token provided.')
-                sys.exit(1)
-            authtoken = result['token']
-        self.headers = {'Content-type':'application/json', 'Authorization': f'Token {authtoken}'}
-        self.token   = authtoken
+            payload = json.dumps({'username': user, 'password': password})
+            conn.request('POST', f'{self.base}/login/', payload, headers={'Content-type':'application/json'})
+            data = json.loads(conn.getresponse().read() or b'{}')
+            if not data.get('token'):
+                logging.error('Auth failed (no token).'); sys.exit(1)
+            token = data['token']
+        self.h = {'Content-type': 'application/json', 'Authorization': f'Token {token}'}
 
-    def _req(self, method, endpoint, payload=None):
-        endpoint = self.base_uri + endpoint
+    def get(self, path):
         conn = http.client.HTTPSConnection(self.host)
-        conn.request(method, endpoint, payload, headers=self.headers)
-        resp = conn.getresponse(); raw = resp.read() or b'{}'
-        if resp.status not in (200, 201, 202, 204):
-            logging.error(f'API {method} {endpoint} -> HTTP {resp.status}: {raw[:300]}')
-            sys.exit(1)
-        try:
-            return json.loads(raw) if raw else {}
-        except Exception:
-            return {}
+        conn.request('GET', f'{self.base}{path}', headers=self.h)
+        return json.loads(conn.getresponse().read() or b'{}')
 
-    def get(self, endpoint):         return self._req('GET',  endpoint)
-    def post(self, endpoint, body):  return self._req('POST', endpoint, body)
+    def post(self, path, payload):
+        conn = http.client.HTTPSConnection(self.host)
+        conn.request('POST', f'{self.base}{path}', payload, headers=self.h)
+        return json.loads(conn.getresponse().read() or b'{}')
 
-# ---------- helpers ----------
-def create_file(path, contents, writemode='w', perms=0o600):
-    with open(path, writemode) as f:
-        f.write(contents)
-    os.chmod(path, perms)
-    logging.info(f'Created file {path} perms={oct(perms)}')
-
-def gen_password(length=20):
+# ------------- helpers -------------
+def pw(n=24):
     chars = string.ascii_letters + string.digits
-    return ''.join(secrets.choice(chars) for _ in range(length))
+    return ''.join(secrets.choice(chars) for _ in range(n))
 
-def run_command(cmd, cwd=None, env=CMD_ENV, check=True, capture=True):
+def sh(cmd, cwd=None, env=CMD_ENV, check=True):
     logging.info(f'$ {cmd}')
     try:
-        if capture:
-            out = subprocess.check_output(shlex.split(cmd), cwd=cwd, env=env, stderr=subprocess.STDOUT)
-            if out:
-                logging.debug(out.decode(errors='ignore').rstrip())
-            return out
-        else:
-            return subprocess.run(shlex.split(cmd), cwd=cwd, env=env, check=check)
+        out = subprocess.check_output(shlex.split(cmd), cwd=cwd, env=env, stderr=subprocess.STDOUT)
+        return out.decode('utf-8', 'ignore')
     except subprocess.CalledProcessError as e:
         logging.error(f'Command failed ({e.returncode}): {cmd}')
-        if hasattr(e, 'output') and e.output:
-            logging.error(e.output.decode(errors='ignore').rstrip())
-        if check:
-            sys.exit(e.returncode)
-        return b""
+        logging.error(e.output.decode('utf-8', 'ignore'))
+        if check: sys.exit(e.returncode)
+        return e.output.decode('utf-8', 'ignore')
 
-def add_cronjob(cron_line):
-    homedir = os.path.expanduser('~')
-    tmpname = f'{homedir}/.tmp{gen_password(8)}'
-    # capture existing; ignore non-zero if no crontab yet
-    existing = run_command('crontab -l', check=False)
-    with open(tmpname, 'wb') as tmp:
-        tmp.write(existing or b'')
-        if existing and not existing.endswith(b'\n'):
-            tmp.write(b'\n')
-        tmp.write((cron_line + '\n').encode())
-    run_command(f'crontab {tmpname}')
-    run_command(f'rm -f {tmpname}')
-    logging.info(f'Added cron: {cron_line}')
+def write(path, content, mode=0o600):
+    with open(path, 'w') as f: f.write(content)
+    os.chmod(path, mode)
+    logging.info(f'Created file {path} perms={oct(mode)}')
 
-# ---------- PG create + wait ----------
-def create_pg_same_server(api, appinfo, prefix='discours'):
-    """
-    - Create psql user WITH password
-    - Wait for user presence
-    - Create DB owned by user with RW grants
-    - Wait for DB presence AND .ready flag
-    """
-    uname = f"{prefix}_{appinfo['id'][:8]}".lower()
-    upass = gen_password(24)
-    server = appinfo['server']
+def add_cron(line):
+    home = os.path.expanduser('~')
+    tmp = f'{home}/.tmp{pw(8)}'
+    # append (keep existing)
+    with open(tmp, 'w') as t:
+        sh('crontab -l', check=False)  # warms cache; ignore rc
+        subprocess.run('crontab -l'.split(), stdout=t)
+        t.write(line + '\n')
+    sh(f'crontab {tmp}')
+    sh(f'rm -f {tmp}')
+    logging.info(f'Added cron: {line}')
 
-    logging.info(f'Creating PG user {uname} on server {server}...')
-    api.post('/psqluser/create/', json.dumps([{'server': server, 'name': uname, 'password': upass}]))
-
-    uid = None
-    t0 = time.time()
-    for _ in range(120):
-        users = api.get('/psqluser/list/')
-        match = [u for u in users if u.get('name') == uname]
-        if match:
-            uid = match[0].get('id')
-            logging.info(f'PG user id={uid} is present ({int(time.time()-t0)}s).')
-            break
-        time.sleep(1)
-    if not uid:
-        logging.error('Timeout waiting for PG user to appear.')
-        sys.exit(1)
-
-    logging.info(f'Creating PG db {uname} owned by {uname} with RW grants...')
-    api.post('/psqldb/create/', json.dumps([{
-        'name': uname,
-        'server': server,
-        'dbusers_readwrite': [uid]
-    }]))
-
-    dbid = None
-    t0 = time.time()
-    for _ in range(180):
-        dbs = api.get('/psqldb/list/')
-        match = [d for d in dbs if d.get('name') == uname]
-        if match:
-            dbid = match[0].get('id')
-            logging.info(f'PG db id={dbid} is present ({int(time.time()-t0)}s).')
-            break
-        time.sleep(1)
-    if not dbid:
-        logging.error('Timeout waiting for PG db to appear.')
-        sys.exit(1)
-
-    logging.info('Waiting for PG db .ready status...')
-    t0 = time.time()
-    for _ in range(300):
-        db = api.get(f'/psqldb/read/{dbid}')
-        if db.get('ready'):
-            logging.info(f'PG db is ready ({int(time.time()-t0)}s).')
-            break
-        time.sleep(1)
-    else:
-        logging.error('Timeout waiting for PG db to be ready.')
-        sys.exit(1)
-
-    # host for rootless podman
-    return {'host': 'host.containers.internal', 'port': 5432, 'user': uname, 'password': upass, 'db': uname}
-
-# ---------- PG SSL probe ----------
-def probe_pg_ssl(host, port, db, user, password):
-    """
-    Try sslmode=disable first; if that fails, try require.
-    Returns: 'disable' (we map to 'prefer'), 'require', or 'prefer' fallback.
-    """
-    run_command(f'podman pull {IMG_PSQLCLI}', check=False)
-
-    base_conn = f'host={host} port={port} dbname={db} user={user} connect_timeout=4'
-    q = "select coalesce((select ssl from pg_stat_ssl where pid=pg_backend_pid()), false);"
-
-    def try_mode(mode):
-        conn = f'"sslmode={mode} {base_conn}"'
-        cmd  = (
-            f'podman run --rm -e PGPASSWORD="{password}" {IMG_PSQLCLI} '
-            f'psql {conn} -tAc "{q}"'
-        )
-        out = run_command(cmd, check=False)
-        if out:
-            s = out.decode().strip()
-            logging.info(f'PG probe sslmode={mode} -> {s!r}')
-            return True, s
-        return False, ''
-
-    ok, _ = try_mode('disable')
-    if ok:
-        return 'prefer'        # disable worked → no SSL required
-
-    ok, _ = try_mode('require')
-    if ok:
-        return 'require'       # require works → server needs SSL
-
-    logging.warning('PG SSL probe inconclusive; defaulting to prefer.')
-    return 'prefer'
-
-# ---------- main ----------
+# ------------- main -------------
 def main():
-    p = argparse.ArgumentParser(description='Install Discourse (Podman) on Opalstack (tiredofit image) with robust checks')
-    p.add_argument('-i', dest='app_uuid',   default=os.environ.get('UUID'), help='App UUID (panel)')
-    p.add_argument('-n', dest='app_name',   default=os.environ.get('APPNAME'), help='App name (panel)')
-    p.add_argument('-t', dest='opal_token', default=os.environ.get('OPAL_TOKEN'), help='Panel API token')
-    p.add_argument('-u', dest='opal_user',  default=os.environ.get('OPAL_USER'), help='Panel username (if no token)')
-    p.add_argument('-p', dest='opal_pass',  default=os.environ.get('OPAL_PASS'), help='Panel password (if no token)')
-    p.add_argument('--debug', action='store_true', help='Debug logging')
-    args = p.parse_args()
+    ap = argparse.ArgumentParser(description='Install Discourse (Podman, self-contained DB) on Opalstack')
+    ap.add_argument('-i', dest='uuid',       default=os.environ.get('UUID'))
+    ap.add_argument('-n', dest='name',       default=os.environ.get('APPNAME'))
+    ap.add_argument('-t', dest='token',      default=os.environ.get('OPAL_TOKEN'))
+    ap.add_argument('-u', dest='user',       default=os.environ.get('OPAL_USER'))
+    ap.add_argument('-p', dest='password',   default=os.environ.get('OPAL_PASS'))
+    args = ap.parse_args()
 
-    logging.basicConfig(level=(logging.DEBUG if args.debug else logging.INFO),
-                        format='[%(asctime)s] %(levelname)s: %(message)s')
+    logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(levelname)s: %(message)s')
+    if not args.uuid:
+        logging.error('Missing app UUID (-i).'); sys.exit(1)
 
-    if not args.app_uuid:
-        logging.error('Missing UUID (-i).'); sys.exit(1)
-
-    logging.info(f'Beginning Discourse install for app "{args.app_name or args.app_uuid}"')
-    api = OpalstackAPITool(API_HOST, API_BASE_URI, args.opal_token, args.opal_user, args.opal_pass)
-    app = api.get(f'/app/read/{args.app_uuid}')
+    api = OpalAPI(API_HOST, API_BASE_URI, args.token, args.user, args.password)
+    app = api.get(f'/app/read/{args.uuid}')
     if not app.get('name'):
-        logging.error('App not found by UUID.'); sys.exit(1)
+        logging.error('App not found.'); sys.exit(1)
 
-    appdir = f"/home/{app['osuser_name']}/apps/{app['name']}"
-    logdir = f"/home/{app['osuser_name']}/logs/apps/{app['name']}"
-    port   = int(app['port'])
-    appname= app['name']
+    appname = app['name']
+    osuser  = app['osuser_name']
+    port    = int(app['port'])
+    appdir  = f'/home/{osuser}/apps/{appname}'
+    logdir  = f'/home/{osuser}/logs/apps/{appname}'
+    podname = f'{appname}-pod'
 
-    # Directories
-    run_command(f'mkdir -p {appdir}/data')
-    run_command(f'mkdir -p {logdir}')
+    logging.info(f'Beginning Discourse install for app "{appname}"')
 
-    # PG: create, grant RW, wait ready
-    pg = create_pg_same_server(api, app, prefix='discours')
+    # dirs
+    sh(f'mkdir -p {appdir}/data')
+    sh(f'mkdir -p {logdir}')
 
-    # Probe SSL requirement BEFORE writing .env
-    sslmode = probe_pg_ssl(pg['host'], pg['port'], pg['db'], pg['user'], pg['password'])
+    # --- generate DB + admin creds (local Postgres; not using panel PG at all) ---
+    db_user = f"disc_{args.uuid[:8]}".lower()
+    db_name = db_user
+    db_pass = pw(24)
 
-    # .env (raw values; no quotes)
+    admin_user  = 'admin'
+    admin_email = f'{admin_user}@example.com'
+    admin_pass  = pw(16)
+
+    # --- .env for Discourse container ---
     env = textwrap.dedent(f"""\
-    # Discourse DB
-    DB_HOST={pg['host']}
-    DB_PORT={pg['port']}
-    DB_NAME={pg['db']}
-    DB_USER={pg['user']}
-    DB_PASS={pg['password']}
-    PGSSLMODE={ 'require' if sslmode=='require' else 'prefer' }
-    DB_SSLMODE={ 'require' if sslmode=='require' else 'prefer' }
+    # Postgres inside the pod
+    DB_HOST=127.0.0.1
+    DB_PORT=5432
+    DB_NAME={db_name}
+    DB_USER={db_user}
+    DB_PASS={db_pass}
 
-    # Redis (same pod)
+    # Redis inside the pod
     REDIS_HOST=127.0.0.1
     REDIS_PORT=6379
 
-    # Admin bootstrap (first run)
-    ADMIN_USER=admin
-    ADMIN_EMAIL=admin@example.com
-    ADMIN_PASS={gen_password(16)}
+    # Admin bootstrap
+    ADMIN_USER={admin_user}
+    ADMIN_EMAIL={admin_email}
+    ADMIN_PASS={admin_pass}
 
-    # Logs
+    # Logs (container writes to /data/logs -> mounted to {logdir})
     LOG_PATH=/data/logs
     LOG_LEVEL=info
     """)
-    create_file(f'{appdir}/.env', env, perms=0o600)
+    write(f'{appdir}/.env', env, 0o600)
 
-    # Helper scripts ----------------------------------------------------------
+    # --- scripts ---
     start = textwrap.dedent(f"""\
     #!/bin/bash
     set -Eeuo pipefail
-    trap 'echo "[start] error at line $LINENO"; exit 1' ERR
-
     APP="{appname}"
     POD="$APP-pod"
-    PORT="{port}"
     APPDIR="{appdir}"
     LOGDIR="{logdir}"
+    PORT="{port}"
     IMG_WEB="{IMG_WEB}"
     IMG_REDIS="{IMG_REDIS}"
-    source "$APPDIR/.env"
+    IMG_PG="{IMG_POSTGIS}"
 
     echo "[start] pulling images..."
-    podman pull "$IMG_WEB" >/dev/null || true
+    podman pull "$IMG_WEB"   >/dev/null || true
     podman pull "$IMG_REDIS" >/dev/null || true
+    podman pull "$IMG_PG"    >/dev/null || true
 
     echo "[start] cleaning previous containers/pod (if any)..."
-    podman rm -f "$APP-redis" "$APP" >/dev/null 2>&1 || true
-    podman pod rm -f "$POD"    >/dev/null 2>&1 || true
+    podman rm -f "$APP" "$APP-redis" "$APP-postgres" >/dev/null 2>&1 || true
+    podman pod rm -f "$POD" >/dev/null 2>&1 || true
 
     echo "[start] preparing log bind mount perms (rootless-friendly)..."
-    podman unshare chown -R 0:0 "$LOGDIR" || true
+    mkdir -p "$LOGDIR"
     chmod 0777 "$LOGDIR" || true
 
-    echo "[start] creating pod and port mapping 127.0.0.1:$PORT -> :3000"
-    podman pod create --name "$POD" -p 127.0.0.1:${{PORT}}:3000
+    echo "[start] creating pod and port mapping 127.0.0.1:${{PORT}} -> :3000"
+    podman pod create --name "$POD" -p 127.0.0.1:${{PORT}}:3000 >/dev/null
+
+    echo "[start] ensuring pgdata dir + perms..."
+    mkdir -p "$APPDIR/pgdata"
+    # postgres image runs as uid 999; grant write
+    podman unshare chown -R 999:999 "$APPDIR/pgdata" || true
+    chmod 0777 "$APPDIR/pgdata" || true
+
+    echo "[start] sourcing DB env..."
+    set -a; source "$APPDIR/.env"; set +a
+
+    echo "[start] starting postgres..."
+    podman run -d --name "$APP-postgres" --pod "$POD" \\
+      -e POSTGRES_USER="$DB_USER" \\
+      -e POSTGRES_PASSWORD="$DB_PASS" \\
+      -e POSTGRES_DB="$DB_NAME" \\
+      -v "$APPDIR/pgdata:/var/lib/postgresql/data" \\
+      "$IMG_PG" >/dev/null
+
+    echo "[start] waiting for postgres readiness..."
+    # wait for pg to accept connections on 127.0.0.1:5432
+    for i in $(seq 1 120); do
+      if podman exec "$APP-postgres" sh -lc 'pg_isready -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" >/dev/null 2>&1'; then
+        echo "[start] postgres is up."
+        break
+      fi
+      sleep 1
+      [[ "$i" -eq 120 ]] && echo "[start] postgres did not become ready in time" && exit 1
+    done
+
+    echo "[start] ensuring pg extensions (hstore, pg_trgm)..."
+    podman exec "$APP-postgres" sh -lc 'psql -U postgres -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -Atc "CREATE EXTENSION IF NOT EXISTS hstore; CREATE EXTENSION IF NOT EXISTS pg_trgm;"' || true
 
     echo "[start] starting redis..."
-    podman run -d --name "$APP-redis" --pod "$POD" --restart=always \\
-      "$IMG_REDIS"
+    podman run -d --name "$APP-redis" --pod "$POD" "$IMG_REDIS" >/dev/null
 
     echo "[start] waiting for redis to respond to PING..."
-    for i in $(seq 1 30); do
-      if podman exec "$APP-redis" redis-cli -h 127.0.0.1 -p 6379 ping | grep -q PONG; then
+    for i in $(seq 1 60); do
+      if podman exec "$APP-redis" sh -lc 'redis-cli -h 127.0.0.1 -p 6379 ping 2>/dev/null | grep -q PONG'; then
         echo "[start] redis is up."
         break
       fi
       sleep 1
+      [[ "$i" -eq 60 ]] && echo "[start] redis did not respond in time" && exit 1
     done
 
     echo "[start] starting discourse (web+sidekiq)..."
-    podman run -d --name "$APP" --pod "$POD" --restart=always \\
+    podman run -d --name "$APP" --pod "$POD" \\
       -v "$APPDIR/data:/data" \\
       -v "$LOGDIR:/data/logs" \\
       --env-file "$APPDIR/.env" \\
       --label io.containers.autoupdate=registry \\
-      "$IMG_WEB"
+      "$IMG_WEB" >/dev/null
 
     echo "[start] waiting for unicorn to listen on :3000..."
-    for i in $(seq 1 120); do
-      # busybox nc may not exist; use ruby (bundled) to check TCP
-      if podman exec "$APP" sh -lc 'ruby -e "require %q(socket); begin; TCPSocket.new(%q(127.0.0.1),3000).close; puts %q(ok); rescue; exit 1; end"' >/dev/null 2>&1; then
-        echo "[start] unicorn is listening."
-        break
+    # try up to 5 minutes, print container logs tail while waiting
+    for i in $(seq 1 300); do
+      if podman exec "$APP" sh -lc 'ss -ltn | grep -q ":3000"'; then
+        echo "[start] unicorn is listening. app is up on 127.0.0.1:${{PORT}}"
+        exit 0
       fi
-      sleep 2
+      if (( i % 10 == 0 )); then
+        echo "[start] still waiting... (logs tail)"
+        podman logs --tail=10 "$APP" 2>/dev/null || true
+      fi
+      sleep 1
     done
-
-    echo "Started Discourse for {appname} on http://127.0.0.1:{port}/"
+    echo "[start] unicorn failed to bind :3000 in time"; exit 1
     """)
 
     stop = textwrap.dedent(f"""\
     #!/bin/bash
     set -Eeuo pipefail
     APP="{appname}"
-    echo "[stop] stopping containers and pod..."
-    podman rm -f "$APP" "$APP-redis" >/dev/null 2>&1 || true
-    podman pod rm -f "$APP-pod"     >/dev/null 2>&1 || true
-    echo "Stopped Discourse for {appname}"
-    """)
-
-    logs = textwrap.dedent(f"""\
-    #!/bin/bash
-    set -Eeuo pipefail
-    LOGDIR="{logdir}"
-    echo "[logs] tailing (Ctrl-C to exit)..."
-    tail -F "$LOGDIR/discourse.log" "$LOGDIR/unicorn.log" "$LOGDIR/unicorn-error.log" "$LOGDIR/sidekiq.log" 2>/dev/null
+    POD="$APP-pod"
+    podman rm -f "$APP" "$APP-redis" "$APP-postgres" >/dev/null 2>&1 || true
+    podman pod rm -f "$POD" >/dev/null 2>&1 || true
+    echo "[stop] stopped {appname}"
     """)
 
     update = textwrap.dedent(f"""\
     #!/bin/bash
     set -Eeuo pipefail
-    APPDIR="{appdir}"
-    echo "[update] restarting app to pick up new image/env..."
-    "$APPDIR/stop" || true
-    "$APPDIR/start"
+    "{appdir}/stop" || true
+    "{appdir}/start"
     """)
 
     check = textwrap.dedent(f"""\
     #!/bin/bash
     set -Eeuo pipefail
     APP="{appname}"
-    PORT="{port}"
-    APPDIR="{appdir}"
-    echo "[check] verifying $APP container running..."
-    RUNNING=$(podman inspect -f '{{{{.State.Running}}}}' "$APP" 2>/dev/null || echo "false")
-    if [ "$RUNNING" != "true" ]; then
-      echo "[check] container down, starting..."
-      "$APPDIR/start"
-      exit 0
+    need_restart=0
+    for c in "$APP-postgres" "$APP-redis" "$APP"; do
+      state=$(podman inspect -f '{{{{.State.Running}}}}' "$c" 2>/dev/null || echo "false")
+      [[ "$state" != "true" ]] && need_restart=1
+    done
+    if [[ "$need_restart" -eq 1 ]]; then
+      echo "[check] one or more containers down; restarting..."
+      "{appdir}/start"
     fi
-    # quick HTTP probe
-    code=$(curl -sS -o /dev/null -m 3 -w '%{{http_code}}' "http://127.0.0.1:$PORT/")
-    echo "[check] HTTP status: $code"
+    """)
+
+    logs_sh = textwrap.dedent(f"""\
+    #!/bin/bash
+    set -Eeuo pipefail
+    tail -F "{logdir}/discourse.log" "{logdir}/unicorn.log" "{logdir}/unicorn-error.log" "{logdir}/sidekiq.log" 2>/dev/null
     """)
 
     diagnose = textwrap.dedent(f"""\
     #!/bin/bash
     set -Eeuo pipefail
     APP="{appname}"
-    POD="$APP-pod"
     APPDIR="{appdir}"
-    LOGDIR="{logdir}"
     PORT="{port}"
+
     echo "=== POD/CONTAINERS ==="
     podman pod ps
     podman ps --format "table {{.Names}}\\t{{.Status}}\\t{{.Image}}\\t{{.Ports}}"
-    echo
-    echo "=== PORTS ==="
-    podman port "$APP" 2>/dev/null || true
-    ss -ltnp | grep -E "127\\.0\\.0\\.1:($PORT)\\b" || echo "host not listening on $PORT (expected, we use mapping)"
-    echo
-    echo "=== RESOLUTION INSIDE POD ==="
-    podman exec "$APP" sh -lc 'getent hosts host.containers.internal || echo no-host-alias'
-    echo
-    echo "=== REDIS PING ==="
-    podman exec "$APP-redis" redis-cli -h 127.0.0.1 -p 6379 ping || true
-    echo
-    echo "=== CURL HOST -> APP ==="
-    curl -sv --max-time 3 "http://127.0.0.1:$PORT/" -o /dev/null || true
-    echo
-    echo "=== LAST LOGS ==="
-    ls -lh "$LOGDIR"
-    for f in "$LOGDIR"/*.log; do echo "--- $f"; tail -n 120 "$f"; echo; done
-    """)
 
-    create_file(f'{appdir}/start',     start,     perms=0o700)
-    create_file(f'{appdir}/stop',      stop,      perms=0o700)
-    create_file(f'{appdir}/logs',      logs,      perms=0o700)
-    create_file(f'{appdir}/update',    update,    perms=0o700)
-    create_file(f'{appdir}/check',     check,     perms=0o700)
-    create_file(f'{appdir}/diagnose',  diagnose,  perms=0o700)
+    echo -e "\\n=== PORTS ==="
+    podman port "$APP" 2>/dev/null || podman inspect -f '{{{{range $p,$v := .NetworkSettings.Ports}}}}{{{{printf "%s -> %v\\n" $p $v}}}}{{{{end}}}}' "$APP"
+    ss -ltnp | grep -E "127\\.0\\.0\\.1:(${port})\\b" || echo "host NOT listening on $PORT"
+
+    echo -e "\\n=== RESOLUTION INSIDE POD ==="
+    podman exec "$APP" sh -lc 'getent hosts host.containers.internal || echo "no-host-alias"'
+
+    echo -e "\\n=== REDIS PING ==="
+    podman exec "$APP-redis" sh -lc 'redis-cli -h 127.0.0.1 -p 6379 ping' || echo "redis ping failed"
+
+    echo -e "\\n=== PG READY? ==="
+    podman exec "$APP-postgres" sh -lc 'pg_isready -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
+
+    echo -e "\\n=== CURL HOST -> APP ==="
+    curl -sv --max-time 3 "http://127.0.0.1:${{PORT}}/" -o /dev/null || true
+
+    echo -e "\\n=== LAST LOGS ==="
+    ls -lh "{logdir}" | sed 's/^/    /'
+    for f in "{logdir}"/discourse.log "{logdir}"/unicorn*.log "{logdir}"/sidekiq.log; do
+      echo "--- $f"
+      tail -n 100 "$f" 2>/dev/null || true
+      echo
+    done
+    """)
 
     readme = textwrap.dedent(f"""\
-    # Opalstack Discourse (tiredofit) — {appname}
+    # Discourse (self-contained) on Opalstack
 
-    **Port:** {port} → container 3000 (127.0.0.1 only)  
-    **Data:** {appdir}/data  
+    **App:** {appname}  
+    **Port:** {port} (host) → 3000 (container)  
+    **Data:** {appdir}/data (Discourse), {appdir}/pgdata (Postgres)  
     **Env:**  {appdir}/.env  
-    **Logs:** {logdir}/  (discourse.log, unicorn.log, unicorn-error.log, sidekiq.log)
+    **Logs:** {logdir}/ (discourse.log, unicorn*.log, sidekiq.log)
 
     ## Commands
-    - Start:   {appdir}/start
-    - Stop:    {appdir}/stop
-    - Update:  {appdir}/update
-    - Check:   {appdir}/check
-    - Logs:    {appdir}/logs
-    - Diagnose:{appdir}/diagnose
+    - Start:  {appdir}/start
+    - Stop:   {appdir}/stop
+    - Update: {appdir}/update
+    - Logs:   {appdir}/logs
+    - Diagnose: {appdir}/diagnose
+    - Health: cron runs {appdir}/check (restarts only if down)
 
     ## Notes
-    - DB host is `host.containers.internal` so the container can reach host Postgres.
-    - Installer probed your PG for SSL. Current mode: **{ 'require' if sslmode=='require' else 'prefer (no SSL required)' }**.
-    - First boot compiles assets and runs migrations; app answers on :3000 when ready.
+    - Everything runs inside the pod: Postgres (16), Redis (7), Discourse (tiredofit).
+    - First boot will run DB migrations; expect 1–3 minutes before 127.0.0.1:{port} responds.
+    - To enable email, add SMTP_* vars to `.env` and run `update`.
     """)
-    create_file(f'{appdir}/README.md', readme, perms=0o600)
 
-    # Cron: ~10 min health; nightly update 01:00–05:59 randomized
-    m = random.randint(0,9)
-    add_cronjob(f'0{m},1{m},2{m},3{m},4{m},5{m} * * * * {appdir}/check > /dev/null 2>&1')
-    hh = random.randint(1,5); mm = random.randint(0,59)
-    add_cronjob(f'{mm} {hh} * * * {appdir}/update > /dev/null 2>&1')
+    write(f'{appdir}/start',     start,   0o700)
+    write(f'{appdir}/stop',      stop,    0o700)
+    write(f'{appdir}/update',    update,  0o700)
+    write(f'{appdir}/check',     check,   0o700)
+    write(f'{appdir}/logs',      logs_sh, 0o700)
+    write(f'{appdir}/diagnose',  diagnose,0o700)
+    write(f'{appdir}/README.md', readme,  0o600)
 
-    # One-time start
-    run_command(f'{appdir}/start', capture=False)
+    # --- Cron: health every ~10m; daily restart during low hours ---
+    m  = random.randint(0,9)
+    hh = random.randint(2,5)
+    mm = random.randint(0,59)
+    add_cron(f'0{m},1{m},2{m},3{m},4{m},5{m} * * * * {appdir}/check > /dev/null 2>&1')
+    add_cron(f'{mm} {hh} * * * {appdir}/update > /dev/null 2>&1')
 
-    # Panel signals
-    api.post('/app/installed/', json.dumps([{'id': args.app_uuid}]))
-    msg = f'Discourse installed for app {appname} (tiredofit). See README.md in {appdir}.'
-    api.post('/notice/create/', json.dumps([{'type': 'M', 'content': msg}]))
+    # --- Kick it once ---
+    sh(f'{appdir}/start')
 
-    logging.info(f'Completed installation of Discourse app {appname}')
-    logging.info(f'URL: http://127.0.0.1:{port}/ (proxied by your web server)')
+    # Signal panel
+    api.post('/app/installed/', json.dumps([{'id': args.uuid}]))
+    api.post('/notice/create/', json.dumps([{
+        'type':'M',
+        'content': f'Discourse installed (self-contained) for app {appname}. See {appdir}/README.md'
+    }]))
+
+    logging.info('Install complete.')
 
 if __name__ == '__main__':
     main()
