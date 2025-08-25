@@ -13,7 +13,9 @@ ARCH / WHERE THINGS RUN:
 
 KEY FIXES:
 - **Init moved out of start**: migrations, PG extensions, and asset build live in `finish_install`.
+- **Hostname default**: sets DISCOURSE_HOSTNAME=wildcard.local and persists it into config/discourse.conf.
 - **CSS crash guard**: clears caches, clobbers, precompiles, verifies real CSS; retries once.
+- **Debug Mode**: ship `debug_on` / `debug_off` helpers + README steps (full stacktraces on demand).
 - **git safe.directory**: `/app` marked safe to avoid “dubious ownership”.
 - **Rootless cgroups**: `CONTAINERS_CGROUP_MANAGER=cgroupfs` + `--cgroups=disabled`.
 - **PG perms**: `podman unshare` to avoid EPERM.
@@ -182,8 +184,8 @@ def main():
     LOG_PATH=/data/logs
     LOG_LEVEL=info
 
-    # Optional: set your site hostname (recommended)
-    # DISCOURSE_HOSTNAME=forum.example.com
+    # Hostname used by Discourse (safe default; change later)
+    DISCOURSE_HOSTNAME=wildcard.local
     """)
     write(f'{appdir}/.env', env, 0o600)
 
@@ -213,7 +215,6 @@ def main():
     echo "    PG:    $IMG_PG"
     echo "### [start] App port (from API): $PORT"
 
-    # Lock issues sometimes happen on multi-tenant hosts
     podman system renumber || true
 
     echo "### [start] Recreate pod to lock correct port"
@@ -228,9 +229,7 @@ def main():
     echo "### [start] Ensure dirs + perms"
     mkdir -p "$LOGDIR" "$APPDIR/pgdata" "$APPDIR/data" "$APPDIR/data/logs" "$APPDIR/data/plugins" "$APPDIR/data/cache"
     chmod 0777 "$LOGDIR" || true
-    # avoid duplicate Automation plugin (image already includes it)
     rm -rf "$APPDIR/data/plugins/automation" || true
-    # postgres perms inside userns
     podman unshare chown -R 999:999 "$APPDIR/pgdata" || true
     podman unshare chmod -R 0770 "$APPDIR/pgdata" || true
 
@@ -249,14 +248,10 @@ def main():
     echo "### [start] Wait for PG ready"
     for i in $(seq 1 120); do
       if podman exec "$APP-postgres" sh -lc 'pg_isready -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" >/dev/null 2>&1'; then
-        echo "[pg] ready"
-        break
+        echo "[pg] ready"; break
       fi
       sleep 1
-      if [[ $i -eq 120 ]]; then
-        echo "!!! postgres not ready, abort"
-        exit 1
-      fi
+      if [[ $i -eq 120 ]]; then echo "!!! postgres not ready, abort"; exit 1; fi
     done
 
     echo "### [start] Start Redis"
@@ -272,6 +267,21 @@ def main():
       -e XDG_CACHE_HOME=/data/cache \\
       --label io.containers.autoupdate=registry \\
       "$IMG_WEB"
+
+    # Ensure hostname persists inside the container on every start (idempotent)
+    echo "### [start] Enforce hostname in discourse.conf"
+    podman exec "$APP" bash -lc '
+      set -e
+      cd /app
+      test -f config/discourse.conf || cp config/discourse_defaults.conf config/discourse.conf
+      H="${{DISCOURSE_HOSTNAME:-wildcard.local}}"
+      if grep -q "^hostname" config/discourse.conf; then
+        sed -i "s/^hostname.*/hostname = $H/" config/discourse.conf
+      else
+        printf "\\nhostname = %s\\n" "$H" >> config/discourse.conf
+      fi
+      echo "[discourse.conf] hostname => $H"
+    ' || true
 
     echo "### [start] Containers:"
     podman ps --format "table {{{{.Names}}}}\\t{{{{.Status}}}}\\t{{{{.Image}}}}\\t{{{{.Ports}}}}"
@@ -408,9 +418,47 @@ def main():
     echo "[migrate] complete."
     """)
 
+    debug_on = textwrap.dedent(f"""\
+    #!/bin/bash
+    # Enable "Debug/TB Mode": full stacktraces in logs + browser, log to stdout.
+    set -Eeuo pipefail
+    export CONTAINERS_CGROUP_MANAGER=cgroupfs
+    set -x
+    APP="{appname}"
+    podman exec "$APP" bash -lc '
+      set -e
+      cd /app
+      cat > config/initializers/_tb_on.rb << "RUBY"
+Rails.application.configure do
+  config.consider_all_requests_local = true
+  config.action_dispatch.show_exceptions = false
+  config.log_level = :debug
+  config.logger = ActiveSupport::Logger.new($stdout)
+end
+Rails.backtrace_cleaner.remove_filters!
+Rails.backtrace_cleaner.remove_silencers!
+RUBY
+      echo "[debug_on] wrote config/initializers/_tb_on.rb"
+    '
+    podman restart "$APP"
+    echo "[debug_on] enabled — hit the failing URL and check: podman logs -f $APP"
+    """)
+
+    debug_off = textwrap.dedent(f"""\
+    #!/bin/bash
+    # Disable Debug/TB Mode.
+    set -Eeuo pipefail
+    export CONTAINERS_CGROUP_MANAGER=cgroupfs
+    set -x
+    APP="{appname}"
+    podman exec "$APP" bash -lc 'rm -f /app/config/initializers/_tb_on.rb || true'
+    podman restart "$APP"
+    echo "[debug_off] disabled"
+    """)
+
     finish_install = textwrap.dedent(f"""\
     #!/bin/bash
-    # First-run init: PG ready → extensions → db:migrate → assets (CSS crash guard) → success banner.
+    # First-run init: PG ready → extensions → db:migrate → enforce hostname → assets → success banner.
     set -Eeuo pipefail
     export CONTAINERS_CGROUP_MANAGER=cgroupfs
     export PS4='+ $(date "+%Y-%m-%d %H:%M:%S") [${{BASH_SOURCE##*/}}:${{LINENO}}] '
@@ -426,7 +474,6 @@ def main():
     # Clean duplicate Automation plugin in data dir (image already ships it)
     rm -rf "$APPDIR/data/plugins/automation" || true
 
-    # Podman lock index sometimes needs a nudge on shared hosts
     podman system renumber || true
 
     # Require containers started by ./start
@@ -437,7 +484,6 @@ def main():
       echo "!!! Web container not running. Run {appdir}/start first."; exit 1
     fi
 
-    # Wait for Postgres
     echo "### [finish_install] Wait for PG ready"
     for i in $(seq 1 120); do
       if podman exec "$APP-postgres" sh -lc 'pg_isready -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" >/dev/null 2>&1'; then
@@ -451,29 +497,41 @@ def main():
     podman exec "$APP-postgres" sh -lc \\
       'psql -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -Atc "CREATE EXTENSION IF NOT EXISTS hstore; CREATE EXTENSION IF NOT EXISTS pg_trgm;"'
 
-    # Fix git “dubious ownership” before running any rake tasks
+    # Fix git “dubious ownership”
     podman exec "$APP" git config --global --add safe.directory /app || true
 
     echo "### [finish_install] Rails db:migrate"
     podman exec "$APP" bash -lc 'cd /app && RAILS_ENV=production bundle exec rake db:migrate'
 
+    # Remove any emergency patches from earlier debugging (idempotent)
+    podman exec "$APP" bash -lc 'rm -f config/initializers/010-wildcard_styles.rb config/initializers/zzz-hostname-hotfix.rb config/initializers/_hostname_guard.rb || true'
+
+    echo "### [finish_install] Ensure hostname in config/discourse.conf"
+    podman exec "$APP" bash -lc '
+      set -e
+      cd /app
+      test -f config/discourse.conf || cp config/discourse_defaults.conf config/discourse.conf
+      H="${{DISCOURSE_HOSTNAME:-wildcard.local}}"
+      if grep -q "^hostname" config/discourse.conf; then
+        sed -i "s/^hostname.*/hostname = $H/" config/discourse.conf
+      else
+        printf "\\nhostname = %s\\n" "$H" >> config/discourse.conf
+      fi
+      echo "[discourse.conf] hostname set to: $H"
+      RAILS_ENV=production bin/rails r "puts \\"GlobalSetting.hostname => #{GlobalSetting.hostname.inspect}\\""
+    '
+
     echo "### [finish_install] CSS crash guard → assets"
     podman exec "$APP" bash -lc '
       set -e
       cd /app
-
-      # Clean caches and stale assets
       rm -rf tmp/cache public/assets node_modules/.cache || true
       RAILS_ENV=production bundle exec rake assets:clobber
-
-      # Precompile
       RAILS_ENV=production bundle exec rake assets:precompile
 
-      # Verify we got a real CSS (not the tiny placeholder)
       check_css() {{
-        set -- public/assets/discourse*.css
+        set -- public/assets/discourse*.css 2>/dev/null
         if [ ! -e "$1" ]; then return 1; fi
-        # consider "good" if first CSS >= 10KB
         local s; s=$(wc -c < "$1" 2>/dev/null || echo 0)
         [ "${{s:-0}}" -ge 10240 ]
       }}
@@ -515,42 +573,69 @@ def main():
     **Logs:** {logdir}/ (discourse.log, unicorn*.log, sidekiq.log)
 
     ## First Run
-    1. Start services (pulls images & boots containers):
-       ```
+    1) Start services (pulls images & boots containers):
+       ```bash
        {appdir}/start
        ```
        Start will:
        - Recreate the pod on **port {port}**,
        - Start PG/Redis/Web,
+       - Enforce `hostname = ${{DISCOURSE_HOSTNAME:-wildcard.local}}` in `config/discourse.conf`,
        - Follow live logs and print an **asset counter every 5s**,
        - Print health probe codes to `http://127.0.0.1:{port}/`.
 
-    2. Initialize the app (migrations, extensions, assets with CSS crash guard):
-       ```
+    2) Initialize the app (migrations, extensions, assets with CSS crash guard):
+       ```bash
        {appdir}/finish_install
        ```
 
-    3. Check health:
-       ```
+    3) Check health:
+       ```bash
        curl -sS -o /dev/null -w 'HTTP %{{http_code}}\\n' http://127.0.0.1:{port}/
        ```
 
     ## Commands
-    - Start:       {appdir}/start
-    - Stop:        {appdir}/stop
-    - Update:      {appdir}/update
-    - Health cron: {appdir}/check (restarts if down)
-    - Diagnose:    {appdir}/diagnose
-    - Logs:        {appdir}/logs
-    - DB Ext:      {appdir}/dbext
-    - Migrate:     {appdir}/migrate
-    - Finish init: {appdir}/finish_install
+    - Start:       {appdir}/start  
+    - Stop:        {appdir}/stop  
+    - Update:      {appdir}/update  
+    - Health cron: {appdir}/check  (restarts if down)  
+    - Diagnose:    {appdir}/diagnose  
+    - Logs:        {appdir}/logs  
+    - DB Ext:      {appdir}/dbext  
+    - Migrate:     {appdir}/migrate  
+    - Finish init: {appdir}/finish_install  
+    - Debug ON:    {appdir}/debug_on   (enable full stacktraces)  
+    - Debug OFF:   {appdir}/debug_off  (disable full stacktraces)
+
+    ## Debug / Full Stacktraces (safe toggle)
+    **When to use:** a page 500s and logs don’t show the full trace.
+
+    ### Turn ON (browser exception page + full TB to stdout)
+    ```bash
+    {appdir}/debug_on
+    # Watch logs:
+    podman logs -f {appname}
+    # Reproduce the failing request in your browser
+    ```
+
+    What this does:
+    - `consider_all_requests_local = true`
+    - `action_dispatch.show_exceptions = false` (re-raise to Unicorn)
+    - `log_level = :debug`, `logger = STDOUT`
+    - Removes Rails backtrace filters
+
+    ### Turn OFF (back to normal prod behavior)
+    ```bash
+    {appdir}/debug_off
+    ```
+
+    **Security note:** Debug mode exposes internals in error pages. Only enable while actively debugging; then switch off.
 
     ## Notes
     - Images can be swapped via env vars: DISCOURSE_IMAGE, REDIS_IMAGE, POSTGRES_IMAGE.
     - We remove duplicate `data/plugins/automation` to avoid plugin redefinition spam.
     - Fontconfig cache is set to `/data/cache` to stop "No writable cache directories".
-    - Set `DISCOURSE_HOSTNAME` in `{appdir}/.env` for proper links and email.
+    - Set `DISCOURSE_HOSTNAME` in `{appdir}/.env` for proper links & email; start/finish_install persist it into `/app/config/discourse.conf`.
     """)
 
     # write files
@@ -562,6 +647,8 @@ def main():
     write(f'{appdir}/diagnose',       diagnose,       0o700)
     write(f'{appdir}/dbext',          dbext,          0o700)
     write(f'{appdir}/migrate',        migrate,        0o700)
+    write(f'{appdir}/debug_on',       debug_on,       0o700)
+    write(f'{appdir}/debug_off',      debug_off,      0o700)
     write(f'{appdir}/finish_install', finish_install, 0o700)
     write(f'{appdir}/README.md',      readme,         0o600)
 
