@@ -173,33 +173,34 @@ def create_pg_same_server(api, appinfo, prefix='discours'):
 # ---------- PG SSL probe ----------
 def probe_pg_ssl(host, port, db, user, password):
     """
-    Run ephemeral psql from official image; try sslmode=disable then require.
-    Returns one of: 'disable', 'require', or 'prefer' (fallback).
+    Try sslmode=disable first; if that fails, try require.
+    Returns: 'disable' (we map to 'prefer'), 'require', or 'prefer' fallback.
     """
-    # pull client image once
     run_command(f'podman pull {IMG_PSQLCLI}', check=False)
 
-    base = f'psql "host={host} port={port} dbname={db} user={user} connect_timeout=4" -tAc '
-    q = r"""select coalesce((select ssl from pg_stat_ssl where pid=pg_backend_pid()), false);"""
+    base_conn = f'host={host} port={port} dbname={db} user={user} connect_timeout=4'
+    q = "select coalesce((select ssl from pg_stat_ssl where pid=pg_backend_pid()), false);"
 
     def try_mode(mode):
-        cmd = f'podman run --rm -e PGPASSWORD="{password}" {IMG_PSQLCLI} {base.replace(\'"host\', f\'"sslmode={mode} host\')} "{q}"'
+        conn = f'"sslmode={mode} {base_conn}"'
+        cmd  = (
+            f'podman run --rm -e PGPASSWORD="{password}" {IMG_PSQLCLI} '
+            f'psql {conn} -tAc "{q}"'
+        )
         out = run_command(cmd, check=False)
         if out:
             s = out.decode().strip()
-            # Expect 't' if SSL is on (for require); 'f' when disabled and allowed
             logging.info(f'PG probe sslmode={mode} -> {s!r}')
             return True, s
         return False, ''
 
-    ok, s = try_mode('disable')
+    ok, _ = try_mode('disable')
     if ok:
-        # If disable works, we can use prefer (no SSL required). Use prefer for speed.
-        return 'prefer'
+        return 'prefer'        # disable worked → no SSL required
 
-    ok, s = try_mode('require')
+    ok, _ = try_mode('require')
     if ok:
-        return 'require'
+        return 'require'       # require works → server needs SSL
 
     logging.warning('PG SSL probe inconclusive; defaulting to prefer.')
     return 'prefer'
