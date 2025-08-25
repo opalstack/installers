@@ -1,23 +1,25 @@
 #!/usr/bin/python3
+# -*- coding: utf-8 -*-
 """
-Discourse on Opalstack (Podman, self-contained)
-- Pod layout: [postgres, redis, discourse] in a single pod
-- Avoids host Postgres, no pg_hba/SSL headaches
-- Verbose logging and a `diagnose` helper
+Discourse on Opalstack (EL9 + Podman) — one-click installer
+Lifecycle matches Mastodon/Ghost/WordPress SOP:
+- Installer: writes files, cron, README, posts notice. **Does not start/pull**.
+- User later runs: start/stop/update/check/diagnose (README explains).
 """
 
-import argparse, sys, os, json, time, logging, http.client, subprocess, shlex, secrets, string, textwrap, random
+import argparse, sys, os, json, logging, http.client, subprocess, shlex, secrets, string, textwrap, random
 
-API_HOST = (os.environ.get('API_URL') or 'https://my.opalstack.com').replace('https://', '').replace('http://', '')
+# ---------- Config ----------
+API_URL = os.environ.get('OPAL_API_URL') or os.environ.get('API_URL') or 'https://my.opalstack.com'
+API_HOST = API_URL.replace('https://', '').replace('http://', '')
 API_BASE_URI = '/api/v1'
 CMD_ENV = {'PATH': '/usr/local/bin:/usr/bin:/bin', 'UMASK': '0002'}
 
-# Images
-IMG_WEB     = 'docker.io/tiredofit/discourse:latest'   # web + sidekiq in one
-IMG_REDIS   = 'docker.io/library/redis:7-alpine'
-IMG_POSTGIS = 'docker.io/library/postgres:16-alpine'   # postgresql (kept lean)
+IMG_WEB   = os.environ.get('DISCOURSE_IMAGE') or 'docker.io/tiredofit/discourse:latest'   # web+sidekiq
+IMG_REDIS = os.environ.get('REDIS_IMAGE')     or 'docker.io/library/redis:7-alpine'
+IMG_PG    = os.environ.get('POSTGRES_IMAGE')  or 'docker.io/library/postgres:16-alpine'   # uid 999
 
-# ------------- API -------------
+# ---------- API ----------
 class OpalAPI:
     def __init__(self, host, base_uri, token=None, user=None, password=None):
         self.host, self.base = host, base_uri
@@ -41,7 +43,7 @@ class OpalAPI:
         conn.request('POST', f'{self.base}{path}', payload, headers=self.h)
         return json.loads(conn.getresponse().read() or b'{}')
 
-# ------------- helpers -------------
+# ---------- helpers ----------
 def pw(n=24):
     chars = string.ascii_letters + string.digits
     return ''.join(secrets.choice(chars) for _ in range(n))
@@ -65,18 +67,17 @@ def write(path, content, mode=0o600):
 def add_cron(line):
     home = os.path.expanduser('~')
     tmp = f'{home}/.tmp{pw(8)}'
-    # append (keep existing)
     with open(tmp, 'w') as t:
-        sh('crontab -l', check=False)  # warms cache; ignore rc
+        sh('crontab -l', check=False)
         subprocess.run('crontab -l'.split(), stdout=t)
         t.write(line + '\n')
     sh(f'crontab {tmp}')
     sh(f'rm -f {tmp}')
     logging.info(f'Added cron: {line}')
 
-# ------------- main -------------
+# ---------- main ----------
 def main():
-    ap = argparse.ArgumentParser(description='Install Discourse (Podman, self-contained DB) on Opalstack')
+    ap = argparse.ArgumentParser(description='Install Discourse (Podman) on Opalstack')
     ap.add_argument('-i', dest='uuid',       default=os.environ.get('UUID'))
     ap.add_argument('-n', dest='name',       default=os.environ.get('APPNAME'))
     ap.add_argument('-t', dest='token',      default=os.environ.get('OPAL_TOKEN'))
@@ -100,46 +101,46 @@ def main():
     logdir  = f'/home/{osuser}/logs/apps/{appname}'
     podname = f'{appname}-pod'
 
-    logging.info(f'Beginning Discourse install for app "{appname}"')
+    logging.info(f'Preparing Discourse for app "{appname}"')
 
     # dirs
     sh(f'mkdir -p {appdir}/data')
+    sh(f'mkdir -p {appdir}/pgdata')
     sh(f'mkdir -p {logdir}')
 
-    # --- generate DB + admin creds (local Postgres; not using panel PG at all) ---
+    # ---- creds/env (no external DB; self-contained) ----
     db_user = f"disc_{args.uuid[:8]}".lower()
     db_name = db_user
     db_pass = pw(24)
-
     admin_user  = 'admin'
     admin_email = f'{admin_user}@example.com'
     admin_pass  = pw(16)
 
-    # --- .env for Discourse container ---
     env = textwrap.dedent(f"""\
-    # Postgres inside the pod
+    # ==== Discourse env ====
+    # Postgres (container in pod)
     DB_HOST=127.0.0.1
     DB_PORT=5432
     DB_NAME={db_name}
     DB_USER={db_user}
     DB_PASS={db_pass}
 
-    # Redis inside the pod
+    # Redis (container in pod)
     REDIS_HOST=127.0.0.1
     REDIS_PORT=6379
 
-    # Admin bootstrap
+    # Admin bootstrap (change if desired)
     ADMIN_USER={admin_user}
     ADMIN_EMAIL={admin_email}
     ADMIN_PASS={admin_pass}
 
-    # Logs (container writes to /data/logs -> mounted to {logdir})
+    # Logging
     LOG_PATH=/data/logs
     LOG_LEVEL=info
     """)
     write(f'{appdir}/.env', env, 0o600)
 
-    # --- scripts ---
+    # ---- scripts (no long waits, no pulls in installer) ----
     start = textwrap.dedent(f"""\
     #!/bin/bash
     set -Eeuo pipefail
@@ -150,34 +151,23 @@ def main():
     PORT="{port}"
     IMG_WEB="{IMG_WEB}"
     IMG_REDIS="{IMG_REDIS}"
-    IMG_PG="{IMG_POSTGIS}"
+    IMG_PG="{IMG_PG}"
 
-    echo "[start] pulling images..."
-    podman pull "$IMG_WEB"   >/dev/null || true
-    podman pull "$IMG_REDIS" >/dev/null || true
-    podman pull "$IMG_PG"    >/dev/null || true
+    echo "[start] create pod + port 127.0.0.1:${{PORT}} -> :3000"
+    podman pod exists "$POD" || podman pod create --name "$POD" -p 127.0.0.1:${{PORT}}:3000 >/dev/null
 
-    echo "[start] cleaning previous containers/pod (if any)..."
-    podman rm -f "$APP" "$APP-redis" "$APP-postgres" >/dev/null 2>&1 || true
-    podman pod rm -f "$POD" >/dev/null 2>&1 || true
-
-    echo "[start] preparing log bind mount perms (rootless-friendly)..."
-    mkdir -p "$LOGDIR"
+    echo "[start] ensure dirs + perms"
+    mkdir -p "$LOGDIR" "$APPDIR/pgdata" "$APPDIR/data"
     chmod 0777 "$LOGDIR" || true
-
-    echo "[start] creating pod and port mapping 127.0.0.1:${{PORT}} -> :3000"
-    podman pod create --name "$POD" -p 127.0.0.1:${{PORT}}:3000 >/dev/null
-
-    echo "[start] ensuring pgdata dir + perms..."
-    mkdir -p "$APPDIR/pgdata"
-    # postgres image runs as uid 999; grant write
+    chmod 0770 "$APPDIR/pgdata" || true
     podman unshare chown -R 999:999 "$APPDIR/pgdata" || true
-    chmod 0777 "$APPDIR/pgdata" || true
+    podman unshare chmod -R 0770 "$APPDIR/pgdata" || true
 
-    echo "[start] sourcing DB env..."
+    echo "[start] env"
     set -a; source "$APPDIR/.env"; set +a
 
     echo "[start] starting postgres..."
+    podman rm -f "$APP-postgres" >/dev/null 2>&1 || true
     podman run -d --name "$APP-postgres" --pod "$POD" \\
       -e POSTGRES_USER="$DB_USER" \\
       -e POSTGRES_PASSWORD="$DB_PASS" \\
@@ -185,34 +175,12 @@ def main():
       -v "$APPDIR/pgdata:/var/lib/postgresql/data" \\
       "$IMG_PG" >/dev/null
 
-    echo "[start] waiting for postgres readiness..."
-    # wait for pg to accept connections on 127.0.0.1:5432
-    for i in $(seq 1 120); do
-      if podman exec "$APP-postgres" sh -lc 'pg_isready -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" >/dev/null 2>&1'; then
-        echo "[start] postgres is up."
-        break
-      fi
-      sleep 1
-      [[ "$i" -eq 120 ]] && echo "[start] postgres did not become ready in time" && exit 1
-    done
-
-    echo "[start] ensuring pg extensions (hstore, pg_trgm)..."
-    podman exec "$APP-postgres" sh -lc 'psql -U postgres -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -Atc "CREATE EXTENSION IF NOT EXISTS hstore; CREATE EXTENSION IF NOT EXISTS pg_trgm;"' || true
-
     echo "[start] starting redis..."
+    podman rm -f "$APP-redis" >/dev/null 2>&1 || true
     podman run -d --name "$APP-redis" --pod "$POD" "$IMG_REDIS" >/dev/null
 
-    echo "[start] waiting for redis to respond to PING..."
-    for i in $(seq 1 60); do
-      if podman exec "$APP-redis" sh -lc 'redis-cli -h 127.0.0.1 -p 6379 ping 2>/dev/null | grep -q PONG'; then
-        echo "[start] redis is up."
-        break
-      fi
-      sleep 1
-      [[ "$i" -eq 60 ]] && echo "[start] redis did not respond in time" && exit 1
-    done
-
     echo "[start] starting discourse (web+sidekiq)..."
+    podman rm -f "$APP" >/dev/null 2>&1 || true
     podman run -d --name "$APP" --pod "$POD" \\
       -v "$APPDIR/data:/data" \\
       -v "$LOGDIR:/data/logs" \\
@@ -220,20 +188,7 @@ def main():
       --label io.containers.autoupdate=registry \\
       "$IMG_WEB" >/dev/null
 
-    echo "[start] waiting for unicorn to listen on :3000..."
-    # try up to 5 minutes, print container logs tail while waiting
-    for i in $(seq 1 300); do
-      if podman exec "$APP" sh -lc 'ss -ltn | grep -q ":3000"'; then
-        echo "[start] unicorn is listening. app is up on 127.0.0.1:${{PORT}}"
-        exit 0
-      fi
-      if (( i % 10 == 0 )); then
-        echo "[start] still waiting... (logs tail)"
-        podman logs --tail=10 "$APP" 2>/dev/null || true
-      fi
-      sleep 1
-    done
-    echo "[start] unicorn failed to bind :3000 in time"; exit 1
+    echo "[start] launched. First start runs DB migrations/assets inside container; watch logs in $LOGDIR."
     """)
 
     stop = textwrap.dedent(f"""\
@@ -257,12 +212,12 @@ def main():
     #!/bin/bash
     set -Eeuo pipefail
     APP="{appname}"
-    need_restart=0
+    need=0
     for c in "$APP-postgres" "$APP-redis" "$APP"; do
       state=$(podman inspect -f '{{{{.State.Running}}}}' "$c" 2>/dev/null || echo "false")
-      [[ "$state" != "true" ]] && need_restart=1
+      [[ "$state" != "true" ]] && need=1
     done
-    if [[ "$need_restart" -eq 1 ]]; then
+    if [[ "$need" -eq 1 ]]; then
       echo "[check] one or more containers down; restarting..."
       "{appdir}/start"
     fi
@@ -278,19 +233,19 @@ def main():
     #!/bin/bash
     set -Eeuo pipefail
     APP="{appname}"
-    APPDIR="{appdir}"
     PORT="{port}"
+    LOGDIR="{logdir}"
 
     echo "=== POD/CONTAINERS ==="
     podman pod ps
     podman ps --format "table {{.Names}}\\t{{.Status}}\\t{{.Image}}\\t{{.Ports}}"
 
-    echo -e "\\n=== PORTS ==="
-    podman port "$APP" 2>/dev/null || podman inspect -f '{{{{range $p,$v := .NetworkSettings.Ports}}}}{{{{printf "%s -> %v\\n" $p $v}}}}{{{{end}}}}' "$APP"
-    ss -ltnp | grep -E "127\\.0\\.0\\.1:(${port})\\b" || echo "host NOT listening on $PORT"
-
-    echo -e "\\n=== RESOLUTION INSIDE POD ==="
-    podman exec "$APP" sh -lc 'getent hosts host.containers.internal || echo "no-host-alias"'
+    echo -e "\\n=== HOST PORT CHECK ==="
+    if command -v curl >/dev/null; then
+      curl -sS -o /dev/null -w "HTTP %{http_code}\\n" "http://127.0.0.1:${{PORT}}/" || true
+    else
+      echo "curl not available"
+    fi
 
     echo -e "\\n=== REDIS PING ==="
     podman exec "$APP-redis" sh -lc 'redis-cli -h 127.0.0.1 -p 6379 ping' || echo "redis ping failed"
@@ -298,20 +253,43 @@ def main():
     echo -e "\\n=== PG READY? ==="
     podman exec "$APP-postgres" sh -lc 'pg_isready -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
 
-    echo -e "\\n=== CURL HOST -> APP ==="
-    curl -sv --max-time 3 "http://127.0.0.1:${{PORT}}/" -o /dev/null || true
-
     echo -e "\\n=== LAST LOGS ==="
-    ls -lh "{logdir}" | sed 's/^/    /'
-    for f in "{logdir}"/discourse.log "{logdir}"/unicorn*.log "{logdir}"/sidekiq.log; do
+    ls -lh "$LOGDIR" | sed 's/^/    /'
+    for f in "$LOGDIR"/discourse.log "$LOGDIR"/unicorn*.log "$LOGDIR"/sidekiq.log; do
       echo "--- $f"
       tail -n 100 "$f" 2>/dev/null || true
       echo
     done
     """)
 
+    # optional: manual DB extension kick (user-run; safe to skip)
+    dbext = textwrap.dedent(f"""\
+    #!/bin/bash
+    set -Eeuo pipefail
+    APP="{appname}"
+    echo "[dbext] creating hstore/pg_trgm (requires postgres up)..."
+    for i in $(seq 1 120); do
+      if podman exec "$APP-postgres" sh -lc 'pg_isready -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" >/dev/null 2>&1'; then
+        podman exec "$APP-postgres" sh -lc 'psql -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -Atc "CREATE EXTENSION IF NOT EXISTS hstore; CREATE EXTENSION IF NOT EXISTS pg_trgm;"'
+        echo "[dbext] done."
+        exit 0
+      fi
+      sleep 1
+    done
+    echo "[dbext] postgres not ready"; exit 1
+    """)
+
+    migrate = textwrap.dedent(f"""\
+    #!/bin/bash
+    set -Eeuo pipefail
+    APP="{appname}"
+    echo "[migrate] running rails db:migrate + assets:precompile (inside container)..."
+    podman exec "$APP" bash -lc 'cd /app && RAILS_ENV=production bundle exec rake db:migrate assets:precompile' || true
+    echo "[migrate] complete (if image supports manual rake)."
+    """)
+
     readme = textwrap.dedent(f"""\
-    # Discourse (self-contained) on Opalstack
+    # Discourse (Podman) on Opalstack
 
     **App:** {appname}  
     **Port:** {port} (host) → 3000 (container)  
@@ -319,46 +297,70 @@ def main():
     **Env:**  {appdir}/.env  
     **Logs:** {logdir}/ (discourse.log, unicorn*.log, sidekiq.log)
 
-    ## Commands
-    - Start:  {appdir}/start
-    - Stop:   {appdir}/stop
-    - Update: {appdir}/update
-    - Logs:   {appdir}/logs
-    - Diagnose: {appdir}/diagnose
-    - Health: cron runs {appdir}/check (restarts only if down)
+    ## Finish Setup (run later via SSH)
+    1. Start services (will pull images on first run and may take a few minutes on first boot):
+       ```
+       {appdir}/start
+       ```
+    2. (Optional) ensure DB extensions after Postgres is up:
+       ```
+       {appdir}/dbext
+       ```
+       Discourse generally enables required extensions automatically; this is provided just in case.
+    3. Watch:
+       ```
+       {appdir}/diagnose
+       podman logs -f {appname}
+       ```
+    4. Configure email by adding SMTP_* vars to `{appdir}/.env`, then:
+       ```
+       {appdir}/update
+       ```
 
-    ## Notes
-    - Everything runs inside the pod: Postgres (16), Redis (7), Discourse (tiredofit).
-    - First boot will run DB migrations; expect 1–3 minutes before 127.0.0.1:{port} responds.
-    - To enable email, add SMTP_* vars to `.env` and run `update`.
+    ## Commands
+    - Start:    {appdir}/start
+    - Stop:     {appdir}/stop
+    - Update:   {appdir}/update
+    - Health:   cron runs {appdir}/check (restarts if down)
+    - Diagnose: {appdir}/diagnose
+    - Logs:     {appdir}/logs
+    - DB Ext:   {appdir}/dbext
+    - Migrate:  {appdir}/migrate (optional manual rake; image usually handles on start)
+
+    ## Credentials
+    - Admin: `{admin_user}` / `{admin_pass}` (email: `{admin_email}`) — change in the UI after first login.
     """)
 
+    # write files
     write(f'{appdir}/start',     start,   0o700)
     write(f'{appdir}/stop',      stop,    0o700)
     write(f'{appdir}/update',    update,  0o700)
     write(f'{appdir}/check',     check,   0o700)
     write(f'{appdir}/logs',      logs_sh, 0o700)
     write(f'{appdir}/diagnose',  diagnose,0o700)
+    write(f'{appdir}/dbext',     dbext,   0o700)
+    write(f'{appdir}/migrate',   migrate, 0o700)
     write(f'{appdir}/README.md', readme,  0o600)
 
-    # --- Cron: health every ~10m; daily restart during low hours ---
+    # cron: health every ~10m; daily restart during low hours
     m  = random.randint(0,9)
     hh = random.randint(2,5)
     mm = random.randint(0,59)
     add_cron(f'0{m},1{m},2{m},3{m},4{m},5{m} * * * * {appdir}/check > /dev/null 2>&1')
     add_cron(f'{mm} {hh} * * * {appdir}/update > /dev/null 2>&1')
 
-    # --- Kick it once ---
-    sh(f'{appdir}/start')
+    # DO NOT start/pull here (user does that later)
 
-    # Signal panel
+    # panel notice
     api.post('/app/installed/', json.dumps([{'id': args.uuid}]))
     api.post('/notice/create/', json.dumps([{
         'type':'M',
-        'content': f'Discourse installed (self-contained) for app {appname}. See {appdir}/README.md'
+        'content': f'Discourse prepared for app {appname}. SSH and run {appdir}/start when ready. '
+                   f'First run will pull images and initialize; see {appdir}/README.md. '
+                   f'Initial admin: {admin_user}/{admin_pass} ({admin_email}).'
     }]))
 
-    logging.info('Install complete.')
+    logging.info('Install complete (no long-running tasks).')
 
 if __name__ == '__main__':
     main()
