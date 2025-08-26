@@ -21,6 +21,7 @@ CMD_ENV = {
         'UMASK': '0002',
         'LD_LIBRARY_PATH': '/usr/sqlite330/lib',
 }
+DJANGO_VERSION = '5.2.5'
 
 
 class OpalstackAPITool():
@@ -169,7 +170,7 @@ def main():
     logging.info('Installed latest uWSGI into virtualenv')
 
     # install django
-    cmd = f'{appdir}/env/bin/pip install django==4.1.8'
+    cmd = f'{appdir}/env/bin/pip install django=={DJANGO_VERSION}'
     doit = run_command(cmd)
     logging.info('Installed latest Django into virtualenv')
 
