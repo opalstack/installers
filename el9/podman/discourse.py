@@ -475,9 +475,7 @@ def main():
       # sanity print what Rails sees
       RAILS_ENV=production bin/rails r "puts \"GlobalSetting.hostname => #{{GlobalSetting.hostname.inspect}}\""
     '
-
-
-
+    
     echo "### [finish_install] CSS crash guard → assets"
     podman exec "$APP" bash -lc '
       set -e
@@ -518,6 +516,49 @@ def main():
 
     echo "### [finish_install] Health probe"
     curl -sS -o /dev/null -w "HTTP %{{http_code}}\\n" "$HEALTH_URL" || true
+
+    
+
+
+
+    podman exec -it discourse bash -lc '
+    set -e
+    cd /app
+
+    # 2) Add a safe prepend-based patch
+    cat > config/initializers/010-wildcard_styles.rb << "RUBY"
+    module WildcardStyles
+      # Use existing hostname if present; otherwise fall back to env/localhost-ish
+      def current_hostname
+        base = (defined?(super) ? super() : nil)
+        (base.respond_to?(:presence) ? base.presence : base) ||
+          (ENV["DISCOURSE_HOSTNAME"].to_s.strip.presence rescue nil) ||
+          (ENV["HOSTNAME"].to_s.strip.presence rescue nil) ||
+          "wildcard"
+      end
+
+      # Keep digest stable + avoid nil→String
+      def theme_digest
+        Digest::SHA1.hexdigest(
+          scss_digest.to_s + color_scheme_digest.to_s + settings_digest + uploads_digest + current_hostname.to_s
+        )
+      end
+    end
+
+    Rails.configuration.to_prepare do
+      if defined?(::Stylesheet::Manager::Builder)
+        ::Stylesheet::Manager::Builder.prepend(WildcardStyles)
+      end
+    end
+    RUBY
+
+    # 3) Clear caches so CSS recompiles
+    RAILS_ENV=production bin/rails r "Stylesheet::Manager.cache.clear; Rails.cache.clear"
+    '
+
+
+
+
 
     echo
     echo "✅ Discourse initialized — rock & roll"
