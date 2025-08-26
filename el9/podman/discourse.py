@@ -469,11 +469,11 @@ def main():
       if grep -q "^hostname" config/discourse.conf; then
         sed -i "s/^hostname.*/hostname = ${{H}}/" config/discourse.conf
       else
-        printf "\nhostname = %s\n" "$H" >> config/discourse.conf
+        printf "hostname = %s" "$H" >> config/discourse.conf
       fi
       echo "[discourse.conf] hostname set to: $H"
       # sanity print what Rails sees
-      RAILS_ENV=production bin/rails r "puts \"GlobalSetting.hostname => #{{GlobalSetting.hostname.inspect}}\""
+      RAILS_ENV=production bin/rails r "puts \\"GlobalSetting.hostname => #{{GlobalSetting.hostname.inspect}}\\""
     '
     
     echo "### [finish_install] CSS crash guard → assets"
