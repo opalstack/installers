@@ -111,5 +111,19 @@ def main():
     m = random.randint(0,9); add_cronjob(f'0{m},2{m},4{m} * * * * {appdir}/check > /dev/null 2>&1')
     hh = random.randint(1,5); mm = random.randint(0,59); add_cronjob(f'{mm} {hh} * * * {appdir}/update > /dev/null 2>&1')
 
+
+    # Start once
+    run_command(f'{appdir}/start')
+
+    # ---- REQUIRED PANEL SIGNALS ----
+    msg = f'Vaultwarden installed on port:{port}.'
+    installed_payload = json.dumps([{'id': a.app_uuid}])
+    api.post('/app/installed/', installed_payload)  # marks app as installed
+    notice_payload = json.dumps([{'type': 'D', 'content': msg}])
+    api.post('/notice/create/', notice_payload)     # dashboard notice
+
+    logging.info(f'Completed installation of Vaultwarden app {a.app_name} - {msg}')
+
+
 if __name__ == '__main__':
     main()
