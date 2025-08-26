@@ -556,6 +556,7 @@ def main():
     RAILS_ENV=production bin/rails r "Stylesheet::Manager.cache.clear; Rails.cache.clear"
     '
 
+    podman restart discourse
 
 
 
