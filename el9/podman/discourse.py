@@ -457,6 +457,27 @@ def main():
     echo "### [finish_install] Rails db:migrate"
     podman exec "$APP" bash -lc 'cd /app && RAILS_ENV=production bundle exec rake db:migrate'
 
+    
+    echo "### [finish_install] Ensure hostname in config/discourse.conf"
+    podman exec "$APP" bash -lc '
+      set -e
+      cd /app
+      # create config if missing
+      test -f config/discourse.conf || cp config/discourse_defaults.conf config/discourse.conf
+      # set hostname = $DISCOURSE_HOSTNAME (fallback to wildcard.local)
+      H="${{DISCOURSE_HOSTNAME:-wildcard.local}}"
+      if grep -q "^hostname" config/discourse.conf; then
+        sed -i "s/^hostname.*/hostname = ${{H}}/" config/discourse.conf
+      else
+        printf "\nhostname = %s\n" "$H" >> config/discourse.conf
+      fi
+      echo "[discourse.conf] hostname set to: $H"
+      # sanity print what Rails sees
+      RAILS_ENV=production bin/rails r "puts \"GlobalSetting.hostname => #{{GlobalSetting.hostname.inspect}}\""
+    '
+
+
+
     echo "### [finish_install] CSS crash guard → assets"
     podman exec "$APP" bash -lc '
       set -e
