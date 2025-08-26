@@ -476,39 +476,6 @@ def main():
       RAILS_ENV=production bin/rails r "puts \\"GlobalSetting.hostname => #{{GlobalSetting.hostname.inspect}}\\""
     '
     
-    echo "### [finish_install] CSS crash guard → assets"
-    podman exec "$APP" bash -lc '
-      set -e
-      cd /app
-
-      # Clean caches and stale assets
-      rm -rf tmp/cache public/assets node_modules/.cache || true
-      RAILS_ENV=production bundle exec rake assets:clobber
-
-      # Precompile
-      RAILS_ENV=production bundle exec rake assets:precompile
-
-      # Verify we got a real CSS (not the tiny placeholder)
-      check_css() {{
-        set -- public/assets/discourse*.css
-        if [ ! -e "$1" ]; then return 1; fi
-        # consider "good" if first CSS >= 10KB
-        local s; s=$(wc -c < "$1" 2>/dev/null || echo 0)
-        [ "${{s:-0}}" -ge 10240 ]
-      }}
-
-      if ! check_css; then
-        echo "[assets] CSS looks wrong; retrying once after deep clean..."
-        rm -rf tmp/cache public/assets node_modules/.cache || true
-        pnpm store prune || true
-        RAILS_ENV=production bundle exec rake assets:precompile
-        if ! check_css; then
-          echo "!!! assets precompile did not produce valid CSS; aborting."
-          exit 1
-        fi
-      fi
-    '
-
     # Discover host port from pod mapping (containerPort 3000)
     HOST_PORT=$(podman pod inspect "$POD" -f '{{{{range .InfraConfig.PortMappings}}}}{{{{if eq .ContainerPort 3000}}}}{{{{.HostPort}}}}{{{{end}}}}{{{{end}}}}' 2>/dev/null || true)
     [ -z "$HOST_PORT" ] && HOST_PORT="{port}"
@@ -518,9 +485,6 @@ def main():
     curl -sS -o /dev/null -w "HTTP %{{http_code}}\\n" "$HEALTH_URL" || true
 
     
-
-
-
     podman exec -it discourse bash -lc '
     set -e
     cd /app
