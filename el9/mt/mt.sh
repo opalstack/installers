@@ -289,7 +289,7 @@ site_payload=$(jq -n \
   --arg name "$SITE_APP_NAME" \
   --arg osuser "$osuser_id" \
   --arg type "$SITE_APP_TYPE" \
-  '[{name: $name, osuser: $osuser, type: $type}]')
+  '[{name: $name, osuser: $osuser, type: $type, json: {}}]')
 
 curl_json_post "/api/v1/app/create/" "$site_payload"
 
@@ -331,17 +331,17 @@ fi
 
 # --------------------------------------------------------------------
 # Create SLS app (nginx symlink-static) pointing to the SITE directory
-# IMPORTANT: API requires 'sym_link_path' (not 'path')
+# IMPORTANT: payload uses json: { sym_link_path: "<dir>" }
 # --------------------------------------------------------------------
 LINK_APP_NAME="${APPNAME}_site_static"
-echo "[step] app/create ${LINK_APP_NAME} type=${SYMLINK_APP_TYPE} sym_link_path=$SITEDIR" >> "$LOGFILE"
+echo "[step] app/create ${LINK_APP_NAME} type=${SYMLINK_APP_TYPE} json.sym_link_path=$SITEDIR" >> "$LOGFILE"
 
 link_payload=$(jq -n \
   --arg name "$LINK_APP_NAME" \
   --arg osuser "$osuser_id" \
   --arg type "$SYMLINK_APP_TYPE" \
   --arg sym "$SITEDIR" \
-  '[{name: $name, osuser: $osuser, type: $type, sym_link_path: $sym}]')
+  '[{name: $name, osuser: $osuser, type: $type, json: {sym_link_path: $sym}}]')
 
 curl_json_post "/api/v1/app/create/" "$link_payload"
 
@@ -387,7 +387,7 @@ We created **three** app pieces:
    - We created a symlink: \`$SITEDIR/mt-static -> $APPDIR/mt-static\`
 
 3. **${APPNAME}_site_static** (**SLS**) — nginx symlink-static app that **serves** the published site  
-   - sym_link_path: \`$SITEDIR\` (entire site dir is served)
+   - \`json.sym_link_path\`: \`$SITEDIR\` (entire site dir is served)
 
 ## Routing (subdomains)
 
@@ -405,7 +405,7 @@ For more sites, repeat:
    \`\`\`bash
    ln -s "/home/$USER/apps/$APPNAME/mt-static" "/home/$USER/apps/${APPNAME}_site2/mt-static"
    \`\`\`
-3. Create another **SLS** app with \`sym_link_path\` pointing to that new site dir.
+3. Create another **SLS** app with \`json.sym_link_path\` pointing to that new site dir.
 4. Route a new subdomain to that new **SLS** app.
 
 MD
@@ -417,7 +417,7 @@ echo "[step] POST app/installed" >> "$LOGFILE"
   && echo "[ok] app/installed" >> "$LOGFILE"
 
 # === Notice ===
-firstLine="Admin bootstrap: /mt.cgi — Site app: ${SITE_APP_NAME} (STA); Static link app: ${LINK_APP_NAME} (SLS, sym_link_path=$SITEDIR). See $APPDIR/README.md."
+firstLine="Admin bootstrap: /mt.cgi — Site app: ${SITE_APP_NAME} (STA); Static link app: ${LINK_APP_NAME} (SLS, json.sym_link_path=$SITEDIR). See $APPDIR/README.md."
 echo "[step] POST notice/create" >> "$LOGFILE"
 /usr/bin/curl -s -X POST \
   --header "Content-Type:application/json" \
