@@ -320,7 +320,7 @@ echo "[ok] site app ready" >> "$LOGFILE"
 # Paths (now created by panel)
 SITEDIR="/home/$USER/apps/${SITE_APP_NAME}"
 
-# Bind mt-static into the site (matches screenshot)
+# Bind mt-static into the site (as per screenshot)
 echo "[step] bind mt-static into site dir" >> "$LOGFILE"
 if [ ! -e "$SITEDIR/mt-static" ]; then
   ln -s "/home/$USER/apps/$APPNAME/mt-static" "$SITEDIR/mt-static"
@@ -331,16 +331,17 @@ fi
 
 # --------------------------------------------------------------------
 # Create SLS app (nginx symlink-static) pointing to the SITE directory
+# IMPORTANT: API requires 'sym_link_path' (not 'path')
 # --------------------------------------------------------------------
 LINK_APP_NAME="${APPNAME}_site_static"
-echo "[step] app/create ${LINK_APP_NAME} type=${SYMLINK_APP_TYPE} -> $SITEDIR" >> "$LOGFILE"
+echo "[step] app/create ${LINK_APP_NAME} type=${SYMLINK_APP_TYPE} sym_link_path=$SITEDIR" >> "$LOGFILE"
 
 link_payload=$(jq -n \
   --arg name "$LINK_APP_NAME" \
   --arg osuser "$osuser_id" \
   --arg type "$SYMLINK_APP_TYPE" \
-  --arg path "$SITEDIR" \
-  '[{name: $name, osuser: $osuser, type: $type, path: $path}]')
+  --arg sym "$SITEDIR" \
+  '[{name: $name, osuser: $osuser, type: $type, sym_link_path: $sym}]')
 
 curl_json_post "/api/v1/app/create/" "$link_payload"
 
@@ -353,6 +354,20 @@ fi
 
 LINK_APP_ID=$(echo "$CURL_BODY" | jq -r '.[0].id')
 echo "[ok] app/create; ${LINK_APP_NAME} id=$LINK_APP_ID body=$(echo "$CURL_BODY" | tr -d '\n' | cut -c1-400)" >> "$LOGFILE"
+
+# poll readiness of SLS as well (nice to have)
+echo "[step] poll symlink app readiness (id=$LINK_APP_ID)" >> "$LOGFILE"
+while :; do
+  curl_json_get "/api/v1/app/read/$LINK_APP_ID"
+  if [[ "$CURL_STATUS" != 2* ]]; then
+    echo "[warn] app/read symlink http=$CURL_STATUS body=$CURL_BODY" >> "$LOGFILE"
+    sleep 3; continue
+  fi
+  ready=$(echo "$CURL_BODY" | jq -r '.ready')
+  [[ "$ready" == "true" ]] && break
+  sleep 2
+done
+echo "[ok] symlink app ready" >> "$LOGFILE"
 
 # === README explaining structure and routing ===
 README="$APPDIR/README.md"
@@ -372,7 +387,7 @@ We created **three** app pieces:
    - We created a symlink: \`$SITEDIR/mt-static -> $APPDIR/mt-static\`
 
 3. **${APPNAME}_site_static** (**SLS**) — nginx symlink-static app that **serves** the published site  
-   - Target path: \`$SITEDIR\`
+   - sym_link_path: \`$SITEDIR\` (entire site dir is served)
 
 ## Routing (subdomains)
 
@@ -385,12 +400,12 @@ This mirrors the screenshot: the **site** sees \`mt-static/\` because the site d
 
 For more sites, repeat:
 
-1. Create another app via API: type **STA** named like \`${APPNAME}_site2\` (this creates its directory).  
+1. Create another app via API: type **STA** named like \`${APPNAME}_site2\`.  
 2. Inside that new site dir, run:  
    \`\`\`bash
    ln -s "/home/$USER/apps/$APPNAME/mt-static" "/home/$USER/apps/${APPNAME}_site2/mt-static"
    \`\`\`
-3. Create another **SLS** app pointing to that new site dir.
+3. Create another **SLS** app with \`sym_link_path\` pointing to that new site dir.
 4. Route a new subdomain to that new **SLS** app.
 
 MD
@@ -402,7 +417,7 @@ echo "[step] POST app/installed" >> "$LOGFILE"
   && echo "[ok] app/installed" >> "$LOGFILE"
 
 # === Notice ===
-firstLine="Admin bootstrap: /mt.cgi — Site app: ${SITE_APP_NAME} (STA); Static link app: ${LINK_APP_NAME} (SLS). See $APPDIR/README.md."
+firstLine="Admin bootstrap: /mt.cgi — Site app: ${SITE_APP_NAME} (STA); Static link app: ${LINK_APP_NAME} (SLS, sym_link_path=$SITEDIR). See $APPDIR/README.md."
 echo "[step] POST notice/create" >> "$LOGFILE"
 /usr/bin/curl -s -X POST \
   --header "Content-Type:application/json" \
