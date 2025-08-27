@@ -2,16 +2,58 @@
 import argparse, sys, logging, os, http.client, json, textwrap, secrets, string, subprocess, shlex, random
 from urllib.parse import urlparse
 
-# ---------- Opalstack API plumbing ----------
-def normalize_host(h):
-    if not h: return 'my.opalstack.com'
-    if '://' not in h: h = 'https://' + h
-    parsed = urlparse(h)
-    return parsed.netloc or 'my.opalstack.com'
-
-API_HOST = normalize_host(os.environ.get('API_URL') or 'https://my.opalstack.com')
+# ---------- Config ----------
+DEFAULT_API_URL = os.environ.get('API_URL') or 'https://my.opalstack.com'
+def _host_from_url(u):
+    p = urlparse(u if '://' in u else ('https://' + u))
+    return p.netloc or p.path or 'my.opalstack.com'
+API_HOST = _host_from_url(DEFAULT_API_URL)
 API_BASE_URI = '/api/v1'
 
+IMG = None  # not using containers in this installer
+
+BASE_ENV = os.environ.copy()
+BASE_ENV['PATH'] = '/usr/local/bin:/usr/bin:/bin:' + BASE_ENV.get('PATH','')
+# ---------- Helpers ----------
+def run_command(cmd, cwd=None, env=None):
+    if env is None: env = BASE_ENV
+    logging.info(f'Running: {cmd}')
+    try:
+        return subprocess.check_output(shlex.split(cmd), cwd=cwd, env=env)
+    except subprocess.CalledProcessError as e:
+        logging.debug(getattr(e, 'output', b''))
+        sys.exit(e.returncode)
+
+def create_file(path, contents, writemode='w', perms=0o600):
+    with open(path, writemode) as f:
+        f.write(contents)
+    os.chmod(path, perms)
+    logging.info(f'Created file {path} {oct(perms)}')
+
+def gen_password(length=20):
+    chars = string.ascii_letters + string.digits
+    return ''.join(secrets.choice(chars) for _ in range(length))
+
+def add_cronjob(cron_line):
+    """Idempotent cron add."""
+    homedir = os.path.expanduser('~')
+    tmpname = f'{homedir}/.tmp_cron_{gen_password(8)}'
+    try:
+        current = subprocess.check_output('crontab -l', shell=True, env=BASE_ENV).decode('utf-8', 'ignore')
+    except subprocess.CalledProcessError:
+        current = ''
+    if cron_line in current:
+        logging.info(f'Cron already present: {cron_line}')
+        return
+    with open(tmpname, 'w') as tmp:
+        if current.strip():
+            tmp.write(current.strip() + '\n')
+        tmp.write(cron_line + '\n')
+    run_command(f'crontab {tmpname}')
+    run_command(f'rm -f {tmpname}')
+    logging.info(f'Added cron job: {cron_line}')
+
+# ---------- API ----------
 class OpalstackAPITool():
     def __init__(self, host, base_uri, authtoken, user, password):
         self.host = host; self.base_uri = base_uri
@@ -25,372 +67,311 @@ class OpalstackAPITool():
                 sys.exit(1)
             authtoken = result['token']
         self.headers = {'Content-type':'application/json', 'Authorization': f'Token {authtoken}'}
-
     def get(self, endpoint):
         endpoint = self.base_uri + endpoint
         conn = http.client.HTTPSConnection(self.host); conn.request('GET', endpoint, headers=self.headers)
         return json.loads(conn.getresponse().read() or b'{}')
-
     def post(self, endpoint, payload):
         endpoint = self.base_uri + endpoint
         conn = http.client.HTTPSConnection(self.host)
         conn.request('POST', endpoint, payload, headers=self.headers)
         return json.loads(conn.getresponse().read() or b'{}')
 
-# ---------- helpers ----------
-BASE_ENV = os.environ.copy()
-BASE_ENV['PATH'] = os.path.expanduser('~/.cargo/bin:/usr/local/bin:/usr/bin:/bin:' + BASE_ENV.get('PATH',''))
-
-def run_command(cmd, cwd=None, env=None, check=True, capture=False):
-    if env is None: env = BASE_ENV
-    logging.info(f'Running: {cmd}')
-    try:
-        if capture:
-            return subprocess.check_output(shlex.split(cmd), cwd=cwd, env=env)
-        else:
-            subprocess.check_call(shlex.split(cmd), cwd=cwd, env=env)
-            return b''
-    except subprocess.CalledProcessError as e:
-        if check:
-            logging.debug(getattr(e, 'output', b''))
-            sys.exit(e.returncode)
-        return getattr(e, 'output', b'')
-
-def create_file(path, contents, writemode='w', perms=0o600):
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, writemode) as f:
-        f.write(contents)
-    os.chmod(path, perms)
-    logging.info(f'Created file {path} {oct(perms)}')
-
-def add_cronjob_once(line):
-    """Append cronjob if not present."""
-    try:
-        current = subprocess.check_output(['crontab','-l'], stderr=subprocess.STDOUT).decode('utf-8','ignore')
-    except subprocess.CalledProcessError:
-        current = ''
-    if line.strip() in [l.strip() for l in current.splitlines()]:
-        logging.info(f'Cron already present: {line}')
-        return
-    homedir = os.path.expanduser('~')
-    tmpname = f'{homedir}/.tmp_cron_{secrets.token_hex(4)}'
-    with open(tmpname,'w') as tmp:
-        tmp.write(current)
-        if current and not current.endswith('\n'): tmp.write('\n')
-        tmp.write(f'{line}\n')
-    run_command(f'crontab {tmpname}')
-    run_command(f'rm -f {tmpname}')
-    logging.info(f'Added cron job: {line}')
-
-# ---------- main ----------
+# ---------- Main ----------
 def main():
-    p = argparse.ArgumentParser(description='Installs Vaultwarden (compiled from source) on Opalstack')
+    p = argparse.ArgumentParser(description='Installs Vaultwarden (build-from-source) on Opalstack')
     p.add_argument('-i', dest='app_uuid',   default=os.environ.get('UUID'))
     p.add_argument('-n', dest='app_name',   default=os.environ.get('APPNAME'))
     p.add_argument('-t', dest='opal_token', default=os.environ.get('OPAL_TOKEN'))
     p.add_argument('-u', dest='opal_user',  default=os.environ.get('OPAL_USER'))
     p.add_argument('-p', dest='opal_pass',  default=os.environ.get('OPAL_PASS'))
-    p.add_argument('--vw-tag', dest='vw_tag', default=os.environ.get('VW_TAG') or '1.34.3')
+    p.add_argument('--vw-tag', dest='vw_tag', default=os.environ.get('VW_TAG','1.34.3'))
     a = p.parse_args()
 
-    logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(levelname)s: %(message)s')
+    logging.basicConfig(level=logging.INFO, format='[%(asctime)s] INFO: %(message)s')
 
     if not a.app_uuid:
-        logging.error('Missing UUID')
-        sys.exit(1)
+        logging.error('Missing UUID'); sys.exit(1)
 
     api = OpalstackAPITool(API_HOST, API_BASE_URI, a.opal_token, a.opal_user, a.opal_pass)
     app = api.get(f'/app/read/{a.app_uuid}')
     if not app.get('name'):
-        logging.error('App not found')
-        sys.exit(1)
+        logging.error('App not found'); sys.exit(1)
 
-    homedir = f'/home/{app["osuser_name"]}'
-    appname = app['name']
-    appdir  = f'{homedir}/apps/{appname}'
-    port    = app['port']
-    logsdir = f'{homedir}/logs/apps/{appname}'
+    username = app['osuser_name']
+    appname  = app['name']
+    port     = app['port']
+    homedir  = f'/home/{username}'
+    appdir   = f'{homedir}/apps/{appname}'
+    logdir   = f'{homedir}/logs/apps/{appname}'
+    bindir   = f'{appdir}/bin'
+    datadir  = f'{appdir}/data'
+    webdir   = f'{appdir}/web'
+    srcdir   = f'{appdir}/src'
 
-    # make dirs (no duplicates)
-    for d in [f'{appdir}/run', f'{appdir}/src', f'{appdir}/tmp', f'{appdir}/bin', f'{appdir}/data', f'{appdir}/web']:
-        run_command(f'mkdir -p {d}')
-    run_command(f'mkdir -p {logsdir}')
+    # Create directories (once)
+    run_command(f'mkdir -p {appdir}/run')
+    run_command(f'mkdir -p {srcdir}')
+    run_command(f'mkdir -p {appdir}/tmp')
+    run_command(f'mkdir -p {bindir}')
+    run_command(f'mkdir -p {datadir}')
+    run_command(f'mkdir -p {webdir}')
+    run_command(f'mkdir -p {logdir}')
 
-    # -------- finish_install.sh (build from source + fetch web vault) --------
-    finish_install = textwrap.dedent(f'''\
+    # finish_install.sh
+    finish_install = textwrap.dedent(f"""\
     #!/usr/bin/env bash
     set -Eeuo pipefail
 
-    APPDIR="$(cd "$(dirname "$0")" && pwd)"
+    ts() {{ date +"[%Y-%m-%d %H:%M:%S]"; }}
+    log() {{ echo "$(ts) $*"; }}
+
+    APPDIR="{appdir}"
+    SRCDIR="$APPDIR/src"
     BINDIR="$APPDIR/bin"
-    SRCDIR="$APPDIR/src/vaultwarden"
-    DATADIR="$APPDIR/data"
     WEBDIR="$APPDIR/web"
-    TMPDIR="$APPDIR/tmp"
-    LOGDIR="$HOME/logs/apps/{appname}"
+    LOGDIR="{logdir}"
+    ENVFILE="$APPDIR/.env"
     VW_TAG="${{VW_TAG:-{a.vw_tag}}}"
-    export PATH="$HOME/.cargo/bin:$PATH"
 
-    _ts() {{ date +"%F %T"; }}
-    log() {{ echo "[`_ts`] $*" | tee -a "$LOGDIR/finish_install.log"; }}
-    mkdir -p "$LOGDIR" "$TMPDIR" "$BINDIR" "$DATADIR" "$WEBDIR"
+    mkdir -p "$SRCDIR" "$BINDIR" "$WEBDIR" "$LOGDIR"
 
-    log "[1/8] Checking build prerequisites..."
-    for dep in curl git tar; do
-      command -v "$dep" >/dev/null 2>&1 || {{ echo "Missing $dep" >&2; exit 1; }}
-    done
+    step() {{ log "[$1] $2"; }}
 
-    log "[2/8] Ensuring rustup (user-local) is installed and stable toolchain available..."
+    step "1/8" "Checking build prerequisites..."
+    for t in git curl tar grep sed awk; do command -v "$t" >/dev/null || {{ echo "Missing $t" >&2; exit 1; }}; done
+
+    step "2/8" "Ensuring rustup (user-local) is installed and stable toolchain available..."
     if ! command -v rustup >/dev/null 2>&1; then
       export RUSTUP_INIT_SKIP_PATH_CHECK=yes
-      curl -fsSL https://sh.rustup.rs | sh -s -- -y --profile minimal >/dev/null
-      . "$HOME/.cargo/env" 2>/dev/null || true
+      curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
     fi
+    # shellcheck source=/dev/null
+    . "$HOME/.cargo/env" 2>/dev/null || true
     export PATH="$HOME/.cargo/bin:$PATH"
-    rustup show >/dev/null 2>&1 || rustup toolchain install stable -y >/dev/null
+    rustup show >/dev/null 2>&1 || true
+    rustup toolchain install stable -q >/dev/null 2>&1 || true
+    rustup default stable -q >/dev/null 2>&1 || true
 
-    log "[3/8] Fetching Vaultwarden source @ $VW_TAG ..."
-    if [[ ! -d "$SRCDIR/.git" ]]; then
-      mkdir -p "$(dirname "$SRCDIR")"
-      git clone --depth=1 --branch "$VW_TAG" https://github.com/dani-garcia/vaultwarden "$SRCDIR" >/dev/null
+    step "3/8" "Fetching Vaultwarden source @ $VW_TAG ..."
+    if [[ -d "$SRCDIR/vaultwarden/.git" ]]; then
+      git -C "$SRCDIR/vaultwarden" fetch --tags --quiet
+      git -C "$SRCDIR/vaultwarden" reset --hard --quiet
+      git -C "$SRCDIR/vaultwarden" checkout -q "tags/$VW_TAG" || git -C "$SRCDIR/vaultwarden" checkout -q "$VW_TAG"
     else
-      (cd "$SRCDIR" && git fetch --tags --depth=1 >/dev/null && git checkout "$VW_TAG" >/dev/null)
+      git clone --quiet https://github.com/dani-garcia/vaultwarden "$SRCDIR/vaultwarden"
+      git -C "$SRCDIR/vaultwarden" checkout -q "tags/$VW_TAG" || git -C "$SRCDIR/vaultwarden" checkout -q "$VW_TAG"
     fi
 
-    log "[4/8] Building Vaultwarden (SQLite) with locked deps (stable)..."
-    set +e
-    (cd "$SRCDIR" && cargo +stable build --release --locked --features sqlite) 2>&1 | tee "$LOGDIR/build.log"
-    rc=${{PIPESTATUS[0]}}
-    set -e
-    if [[ $rc -ne 0 ]]; then
-      log "[4b/8] Stable build failed (rc=$rc). Installing nightly and retrying..."
-      rustup toolchain install nightly -y >/dev/null
-      (cd "$SRCDIR" && cargo +nightly build --release --locked --features sqlite) 2>&1 | tee -a "$LOGDIR/build.log"
-    fi
-
-    log "[5/8] Installing binary..."
-    install -m 0755 "$SRCDIR/target/release/vaultwarden" "$BINDIR/vaultwarden"
-
-    log "[6/8] Fetching Bitwarden Web Vault assets..."
-    rm -rf "$WEBDIR.tmp" && mkdir -p "$WEBDIR.tmp"
-    got=0
-
-    try_fetch() {{
-      url="$1"
-      if [[ -z "$url" ]]; then return 1; fi
-      fname="$TMPDIR/webvault.$(echo "$url" | sed -E 's/.*\\.(tar\\.gz|zip)$/\\1/')"
-      if [[ "$url" =~ \\.zip$ ]]; then
-        command -v unzip >/dev/null 2>&1 || {{ log "  unzip not found; skipping zip asset"; return 1; }}
-        curl -fL "$url" -o "$TMPDIR/webvault.zip" || return 1
-        rm -rf "$WEBDIR.tmp" && mkdir -p "$WEBDIR.tmp"
-        unzip -oq "$TMPDIR/webvault.zip" -d "$WEBDIR.tmp" || return 1
-      else
-        curl -fL "$url" -o "$TMPDIR/webvault.tgz" || return 1
-        rm -rf "$WEBDIR.tmp" && mkdir -p "$WEBDIR.tmp"
-        tar -xzf "$TMPDIR/webvault.tgz" -C "$WEBDIR.tmp" || return 1
-      fi
-      # find a dir that has index.html and copy its content into $WEBDIR
-      target="$(find "$WEBDIR.tmp" -type f -name index.html -print -quit 2>/dev/null || true)"
-      if [[ -n "$target" ]]; then
-        srcdir="$(dirname "$target")"
-        rm -rf "$WEBDIR" && mkdir -p "$WEBDIR"
-        (cd "$srcdir" && tar -cf - .) | (cd "$WEBDIR" && tar -xf -)
-        got=1
-        return 0
-      fi
-      return 1
+    step "4/8" "Building Vaultwarden (SQLite) with locked deps (stable)..."
+    mkdir -p "$LOGDIR"
+    # Build
+    ( cd "$SRCDIR/vaultwarden" && cargo build --locked --release --features sqlite ) || {{
+      echo "Build failed"; exit 1;
     }}
 
-    # candidate URLs (official + legacy fallback)
-    urls=()
-    urls+=($(curl -fsSL https://api.github.com/repos/vaultwarden/web-vault/releases/latest \
-      | grep -Eo '"browser_download_url": *"[^"]+\\.(tar\\.gz|zip)"' | cut -d'"' -f4 || true))
-    urls+=("https://github.com/dani-garcia/bw_web_builds/releases/latest/download/bw_web_latest.tar.gz")
+    step "5/8" "Installing binary..."
+    install -m 0700 "$SRCDIR/vaultwarden/target/release/vaultwarden" "$BINDIR/vaultwarden"
 
-    for u in "${{urls[@]}}"; do
-      log "  Trying $u"
-      if try_fetch "$u"; then
-        log "  Web vault installed to $WEBDIR"
-        break
+    step "6/8" "Fetching Bitwarden Web Vault assets..."
+    rm -rf "$WEBDIR"/* || true
+    WEB_OK=0
+    # Try GitHub API for latest bw_web_builds tarball
+    API_JSON="$(curl -sL https://api.github.com/repos/dani-garcia/bw_web_builds/releases/latest || true)"
+    if echo "$API_JSON" | grep -q '"browser_download_url"'; then
+      URL="$(echo "$API_JSON" | grep -Eo 'https[^"]+\\.tar\\.gz' | head -n1 || true)"
+      if [[ -n "$URL" ]]; then
+        if curl -fsSL "$URL" | tar xz -C "$WEBDIR" --strip-components=1; then
+          WEB_OK=1
+        fi
       fi
-    done
-
-    if [[ $got -eq 0 ]]; then
-      log "  Skipped web vault download (asset missing?); server will run headless until WEB_VAULT_FOLDER is provided."
+    fi
+    if [[ "$WEB_OK" -eq 0 ]]; then
+      log "Web vault download failed or not found; leaving headless (you can retry later)."
     fi
 
-    log "[7/8] Writing env file..."
-    ENVFILE="$APPDIR/.env"
+    step "7/8" "Writing env file..."
     touch "$ENVFILE"
-    grep -q '^DATA_FOLDER=' "$ENVFILE" || echo "DATA_FOLDER=$DATADIR" >> "$ENVFILE"
-    if [[ -f "$WEBDIR/index.html" ]]; then
-      grep -q '^WEB_VAULT_FOLDER=' "$ENVFILE" || echo "WEB_VAULT_FOLDER=$WEBDIR" >> "$ENVFILE"
-    fi
-    grep -q '^ROCKET_ADDRESS=' "$ENVFILE" || echo "ROCKET_ADDRESS=127.0.0.1" >> "$ENVFILE"
-    # ROCKET_PORT is injected by start script
+    chmod 600 "$ENVFILE"
 
-    log "[8/8] Done. Start the app with:  $APPDIR/start"
-    echo "Binary: $BINDIR/vaultwarden"
-    echo "Logs:   $LOGDIR/vaultwarden.log"
-    ''')
+    ensure_kv() {{
+      local k="$1" v="$2"
+      if grep -q "^$k=" "$ENVFILE" 2>/dev/null; then
+        sed -i "s|^$k=.*|$k=$v|" "$ENVFILE"
+      else
+        echo "$k=$v" >> "$ENVFILE"
+      fi
+    }}
 
-    # -------- start/stop/status/restart/check/view-logs ----------
-    start = textwrap.dedent(f'''\
-    #!/usr/bin/env bash
-    set -Eeuo pipefail
-
-    APPDIR="$(cd "$(dirname "$0")" && pwd)"
-    LOGDIR="$HOME/logs/apps/{appname}"
-    RUNDIR="$APPDIR/run"
-    BINDIR="$APPDIR/bin"
-    PIDFILE="$RUNDIR/vaultwarden.pid"
-    APP_NAME="{appname}"
-    PORT="{port}"
-
-    mkdir -p "$LOGDIR" "$RUNDIR"
-    export PATH="$HOME/.cargo/bin:$PATH"
-    # env overrides
-    if [[ -f "$APPDIR/.env" ]]; then set -a; source "$APPDIR/.env"; set +a; fi
-    export ROCKET_ADDRESS="${{ROCKET_ADDRESS:-127.0.0.1}}"
-    export ROCKET_PORT="$PORT"
-    export DATA_FOLDER="${{DATA_FOLDER:-$APPDIR/data}}"
-
-    # web vault wiring
-    if [[ -f "$APPDIR/web/index.html" ]]; then
-      export WEB_VAULT_FOLDER="$APPDIR/web"
-      unset WEB_VAULT_ENABLED
+    ensure_kv "DATA_FOLDER" "{datadir}"
+    ensure_kv "ROCKET_ADDRESS" "127.0.0.1"
+    ensure_kv "ROCKET_PORT" "{port}"
+    ensure_kv "WEBSOCKET_ENABLED" "true"
+    ensure_kv "WEB_VAULT_FOLDER" "{webdir}"
+    if [[ "$WEB_OK" -eq 1 ]]; then
+      ensure_kv "WEB_VAULT_ENABLED" "true"
     else
-      export WEB_VAULT_ENABLED=false
+      ensure_kv "WEB_VAULT_ENABLED" "false"
     fi
-
-    # soft ulimit bump (ignore failure)
-    ulimit -n 4096 || true
-
-    # stop previous
-    if [[ -s "$PIDFILE" ]] && ps -p "$(cat "$PIDFILE")" -o comm= | grep -q vaultwarden; then
-      kill "$(cat "$PIDFILE")" || true
-      sleep 0.2
+    ensure_kv "LOG_FILE" "{logdir}/vaultwarden.log"
+    # Only create ADMIN_TOKEN once
+    if ! grep -q "^ADMIN_TOKEN=" "$ENVFILE"; then
+      ensure_kv "ADMIN_TOKEN" "$(dd if=/dev/urandom bs=16 count=1 2>/dev/null | od -An -tx1 | tr -d ' \\n')"
     fi
+    # sensible defaults; adjust later if needed
+    ensure_kv "SIGNUPS_ALLOWED" "false"
+    ensure_kv "DOMAIN" ""
+    ensure_kv "SMTP_HOST" ""
+    ensure_kv "SMTP_PORT" "587"
+    ensure_kv "SMTP_FROM" "vaultwarden@yourdomain"
+    ensure_kv "SMTP_USERNAME" ""
+    ensure_kv "SMTP_PASSWORD" ""
+    ensure_kv "SMTP_SECURITY" "starttls"
 
-    # launch
-    nohup "$BINDIR/vaultwarden" >> "$LOGDIR/vaultwarden.log" 2>&1 &
-    echo $! > "$PIDFILE"
-    echo "Started Vaultwarden on 127.0.0.1:$PORT (pid $(cat "$PIDFILE")). Logs: $LOGDIR/vaultwarden.log"
-    ''')
+    step "8/8" "Done. Start the app with:  {appdir}/start"
+    echo "Binary: {bindir}/vaultwarden"
+    echo "Logs:   {logdir}/vaultwarden.log"
+    """)
 
-    stop = textwrap.dedent('''\
+    # start/stop/etc.
+    start = textwrap.dedent(f"""\
     #!/usr/bin/env bash
     set -Eeuo pipefail
-    APPDIR="$(cd "$(dirname "$0")" && pwd)"
+    APPDIR="{appdir}"
+    ENVFILE="$APPDIR/.env"
+    LOGFILE="{logdir}/vaultwarden.log"
     PIDFILE="$APPDIR/run/vaultwarden.pid"
-    if [[ -s "$PIDFILE" ]] && ps -p "$(cat "$PIDFILE")" >/dev/null 2>&1; then
-      kill "$(cat "$PIDFILE")" || true
-      sleep 0.3
-    fi
-    rm -f "$PIDFILE"
-    echo "Stopped."
-    ''')
 
-    status = textwrap.dedent('''\
+    mkdir -p "$(dirname "$LOGFILE")" "$APPDIR/run"
+    touch "$LOGFILE"; chmod 600 "$LOGFILE"
+
+    if [[ -f "$PIDFILE" ]] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
+      echo "Vaultwarden already running (pid $(cat "$PIDFILE"))."; exit 0
+    fi
+
+    set +e
+    ulimit -n 4096 2>/dev/null || true
+    set -e
+
+    set -a
+    [[ -f "$ENVFILE" ]] && . "$ENVFILE"
+    set +a
+
+    nohup "{bindir}/vaultwarden" >> "$LOGFILE" 2>&1 &
+    echo $! > "$PIDFILE"
+    echo "Started Vaultwarden on 127.0.0.1:{port} (pid $(cat "$PIDFILE")). Logs: $LOGFILE"
+    """)
+
+    stop = textwrap.dedent(f"""\
     #!/usr/bin/env bash
     set -Eeuo pipefail
-    PIDFILE="$(cd "$(dirname "$0")" && pwd)/run/vaultwarden.pid"
-    if [[ -s "$PIDFILE" ]] && ps -p "$(cat "$PIDFILE")" -o pid=,comm=; then
+    PIDFILE="{appdir}/run/vaultwarden.pid"
+    if [[ -f "$PIDFILE" ]]; then
+      PID="$(cat "$PIDFILE")"
+      if kill -0 "$PID" 2>/dev/null; then
+        kill "$PID" || true
+        sleep 1
+      fi
+      rm -f "$PIDFILE"
+      echo "Stopped Vaultwarden."
+    else
+      echo "Not running."
+    fi
+    """)
+
+    status = textwrap.dedent(f"""\
+    #!/usr/bin/env bash
+    PIDFILE="{appdir}/run/vaultwarden.pid"
+    if [[ -f "$PIDFILE" ]] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
+      echo "Vaultwarden running (pid $(cat "$PIDFILE")), listening on 127.0.0.1:{port}"
       exit 0
     else
-      echo "Not running"
-      exit 1
+      echo "Vaultwarden not running"; exit 1
     fi
-    ''')
+    """)
 
-    restart = textwrap.dedent('''\
+    restart = textwrap.dedent(f"""\
     #!/usr/bin/env bash
     set -Eeuo pipefail
-    "$(cd "$(dirname "$0")" && pwd)/stop" || true
-    exec "$(cd "$(dirname "$0")" && pwd)/start"
-    ''')
+    "{appdir}/stop" || true
+    "{appdir}/start"
+    """)
 
-    check = textwrap.dedent(f'''\
+    check = textwrap.dedent(f"""\
     #!/usr/bin/env bash
     set -Eeuo pipefail
-    APPDIR="$(cd "$(dirname "$0")" && pwd)"
-    PORT="{port}"
-    if ! curl -fsS "http://127.0.0.1:$PORT/alive" >/dev/null 2>&1; then
-      "$APPDIR/start"
+    if ! curl -fsS http://127.0.0.1:{port}/ >/dev/null 2>&1; then
+      "{appdir}/start" >/dev/null 2>&1 || true
     fi
-    ''')
+    """)
 
-    view_logs = textwrap.dedent(f'''\
+    viewlogs = textwrap.dedent(f"""\
     #!/usr/bin/env bash
-    LOGFILE="$HOME/logs/apps/{appname}/vaultwarden.log"
-    if command -v less >/dev/null 2>&1; then
-      exec less +F "$LOGFILE"
-    else
-      exec tail -f "$LOGFILE"
-    fi
-    ''')
+    tail -n 200 -F {logdir}/vaultwarden.log
+    """)
 
-    readme = textwrap.dedent(f'''\
-    Vaultwarden (from source) — Opalstack app "{appname}"
+    readme = textwrap.dedent(f"""\
+    Vaultwarden (Bitwarden-compatible) on Opalstack
+    ===============================================
 
-    Files & dirs:
-      App dir:         {appdir}
-      Binary:          {appdir}/bin/vaultwarden
-      Data:            {appdir}/data
-      Web vault:       {appdir}/web  (contains index.html once fetched)
-      Logs:            {logsdir}/vaultwarden.log
+    Paths
+    -----
+    App dir:   {appdir}
+    Binary:    {bindir}/vaultwarden
+    Data:      {datadir}
+    Web vault: {webdir}
+    Logs:      {logdir}/vaultwarden.log
+    Port:      127.0.0.1:{port}
 
-    Commands:
-      {appdir}/finish_install.sh    # builds/updates server + downloads Web Vault
-      {appdir}/start                # starts on 127.0.0.1:{port}
-      {appdir}/stop
-      {appdir}/status
-      {appdir}/restart
-      {appdir}/view-logs
+    Commands
+    --------
+      {appdir}/finish_install.sh   # build/update binary + web vault
+      {appdir}/start               # start service
+      {appdir}/stop                # stop service
+      {appdir}/status              # status
+      {appdir}/restart             # restart
+      {appdir}/view-logs           # tail logs
 
-    Notes:
-      • Web vault is the static UI. If not present, server runs headless (API only).
-      • Configure env in {appdir}/.env (e.g., SMTP_*, ADMIN_TOKEN, SIGNUPS_ALLOWED).
-      • Add a Route in the panel to expose your domain → this app.
-    ''')
+    Notes
+    -----
+    • Default DB is SQLite at $DATA_FOLDER/db.sqlite3 (no external DB needed).
+    • If web vault fetch fails (GitHub rate limits, etc.), service starts headless.
+      Re-run finish_install.sh later or set WEB_VAULT_ENABLED=false in .env.
+    • Point an Opalstack Route to this app’s port to serve HTTP/HTTPS.
+    """)
 
-    # write files (no duplicates)
+    # Write files
     create_file(f'{appdir}/finish_install.sh', finish_install, perms=0o700)
     create_file(f'{appdir}/start',  start,  perms=0o700)
     create_file(f'{appdir}/stop',   stop,   perms=0o700)
     create_file(f'{appdir}/status', status, perms=0o700)
-    create_file(f'{appdir}/restart',restart,perms=0o700)
+    create_file(f'{appdir}/restart', restart, perms=0o700)
     create_file(f'{appdir}/check',  check,  perms=0o700)
-    create_file(f'{appdir}/view-logs', view_logs, perms=0o700)
+    create_file(f'{appdir}/view-logs', viewlogs, perms=0o700)
+    # Seed .env with essentials (finish_install will refine/ensure)
+    env_seed = textwrap.dedent(f"""\
+    DATA_FOLDER="{datadir}"
+    ROCKET_ADDRESS="127.0.0.1"
+    ROCKET_PORT="{port}"
+    WEB_VAULT_FOLDER="{webdir}"
+    WEB_VAULT_ENABLED=false
+    WEBSOCKET_ENABLED=true
+    LOG_FILE="{logdir}/vaultwarden.log"
+    SIGNUPS_ALLOWED=false
+    ADMIN_TOKEN="{os.urandom(16).hex()}"
+    """)
+    create_file(f'{appdir}/.env', env_seed, perms=0o600)
     create_file(f'{appdir}/README.txt', readme, perms=0o600)
 
-    # minimal .env defaults (non-secret)
-    base_env = textwrap.dedent(f"""\
-    DATA_FOLDER={appdir}/data
-    ROCKET_ADDRESS=127.0.0.1
-    # ROCKET_PORT is set by start script to {port}
-    # Example mail config (uncomment + edit):
-    # SMTP_HOST=smtp.yourdomain
-    # SMTP_FROM=vaultwarden@yourdomain
-    # SMTP_PORT=587
-    # SMTP_SECURITY=starttls
-    # SMTP_USERNAME=
-    # SMTP_PASSWORD=
-    # SIGNUPS_ALLOWED=false
-    """)
-    create_file(f'{appdir}/.env', base_env, perms=0o600)
-
-    # cron: health check every ~10 minutes (skewed) + nightly refresh of web-vault
+    # Cron: health check only (no auto-rebuilds)
     m = random.randint(0,9)
-    add_cronjob_once(f'0{m},2{m},4{m} * * * * {appdir}/check > /dev/null 2>&1')
-    hh = random.randint(3,5); mm = random.randint(0,59)
-    add_cronjob_once(f'{mm} {hh} * * * {appdir}/finish_install.sh > /dev/null 2>&1')
+    add_cronjob(f'0{m},2{m},4{m} * * * * {appdir}/check > /dev/null 2>&1')
 
     # ---- REQUIRED PANEL SIGNALS ----
-    msg = f'Vaultwarden (from source) bootstrapped on port:{port}. Run finish_install.sh, then start.'
-    installed_payload = json.dumps([{{'id': a.app_uuid}}])
+    msg = f'Vaultwarden bootstrapped on port:{port}. Run finish_install.sh then start.'
+    installed_payload = json.dumps([{'id': a.app_uuid}])
     api.post('/app/installed/', installed_payload)  # marks app as installed
-    notice_payload = json.dumps([{{'type': 'D', 'content': msg}}])
+    notice_payload = json.dumps([{'type': 'D', 'content': msg}])
     api.post('/notice/create/', notice_payload)     # dashboard notice
 
     logging.info(f'Completed bootstrap for {appname}. Next: {appdir}/finish_install.sh then {appdir}/start')
