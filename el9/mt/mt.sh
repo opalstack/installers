@@ -176,6 +176,11 @@ else
   echo "[step] extract MT into $APPDIR" >> "$LOGFILE"
   /bin/tar -xzf "$APPDIR/.cache/mt.tar.gz" -C "$APPDIR" --strip-components=1 && echo "[ok] extracted MT" >> "$LOGFILE"
 
+  # Disable bundled URI so EL9’s perl-URI is used
+  mkdir -p "$APPDIR/extlib-disabled"
+  mv "$APPDIR/extlib/URI.pm" "$APPDIR/extlib/URI" "$APPDIR/extlib-disabled/" 2>/dev/null || true
+
+
   # Write mt-config.cgi (monolith at base domain; shared-host safeties)
   echo "[step] write mt-config.cgi" >> "$LOGFILE"
   cat > "$APPDIR/mt-config.cgi" <<CFGEOF
