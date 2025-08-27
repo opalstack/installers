@@ -1,6 +1,6 @@
 #! /bin/bash
 # Opalstack Movable Type installer.
-# Adds: SITE app (STA static-only), README.md, and SLS symlink-static app that serves the SITE dir.
+# Adds: SITE app (STA static-only), README.md, and SLS symlink-static app that serves the SITE's mt-static.
 # THIS LINE
 
 CRED2='\033[1;91m'        # Red
@@ -14,7 +14,7 @@ CEND='\033[0m'            # Text Reset
 
 # --- App type codes (panel codes) ---
 SITE_APP_TYPE="STA"     # Static Only (creates site dir)
-SYMLINK_APP_TYPE="SLS"  # Symbolic link, Static only (nginx serves target path)
+SYMLINK_APP_TYPE="SLS"  # Symbolic link, Static only (nginx serves target symlink)
 
 # --- noisy curl helpers (capture HTTP code + body) ---
 curl_json_post() { # endpoint json_payload -> sets CURL_STATUS CURL_BODY
@@ -317,30 +317,23 @@ while :; do
 done
 echo "[ok] site app ready" >> "$LOGFILE"
 
-# Paths (now created by panel)
+# Panel has created the site directory. DO NOT manually create any symlink here.
 SITEDIR="/home/$USER/apps/${SITE_APP_NAME}"
-
-# Bind mt-static into the site (as per screenshot)
-echo "[step] bind mt-static into site dir" >> "$LOGFILE"
-if [ ! -e "$SITEDIR/mt-static" ]; then
-  ln -s "/home/$USER/apps/$APPNAME/mt-static" "$SITEDIR/mt-static"
-  echo "[ok] $SITEDIR/mt-static -> /home/$USER/apps/$APPNAME/mt-static" >> "$LOGFILE"
-else
-  echo "[skip] mt-static already present" >> "$LOGFILE"
-fi
+SYMLINK_TARGET="$SITEDIR/mt-static"   # final full path for SLS to serve
 
 # --------------------------------------------------------------------
-# Create SLS app (nginx symlink-static) pointing to the SITE directory
-# IMPORTANT: payload uses json: { sym_link_path: "<dir>" }
+# Create SLS app (nginx symlink-static) pointing to the **symlink path**
+# IMPORTANT: payload uses json: { sym_link_path: "<full path to site/mt-static" }
+# DO NOT manually create ln -s; platform handles the target internals.
 # --------------------------------------------------------------------
 LINK_APP_NAME="${APPNAME}_site_static"
-echo "[step] app/create ${LINK_APP_NAME} type=${SYMLINK_APP_TYPE} json.sym_link_path=$SITEDIR" >> "$LOGFILE"
+echo "[step] app/create ${LINK_APP_NAME} type=${SYMLINK_APP_TYPE} json.sym_link_path=$SYMLINK_TARGET" >> "$LOGFILE"
 
 link_payload=$(jq -n \
   --arg name "$LINK_APP_NAME" \
   --arg osuser "$osuser_id" \
   --arg type "$SYMLINK_APP_TYPE" \
-  --arg sym "$SITEDIR" \
+  --arg sym "$SYMLINK_TARGET" \
   '[{name: $name, osuser: $osuser, type: $type, json: {sym_link_path: $sym}}]')
 
 curl_json_post "/api/v1/app/create/" "$link_payload"
@@ -355,7 +348,7 @@ fi
 LINK_APP_ID=$(echo "$CURL_BODY" | jq -r '.[0].id')
 echo "[ok] app/create; ${LINK_APP_NAME} id=$LINK_APP_ID body=$(echo "$CURL_BODY" | tr -d '\n' | cut -c1-400)" >> "$LOGFILE"
 
-# poll readiness of SLS as well (nice to have)
+# poll readiness of SLS as well
 echo "[step] poll symlink app readiness (id=$LINK_APP_ID)" >> "$LOGFILE"
 while :; do
   curl_json_get "/api/v1/app/read/$LINK_APP_ID"
@@ -383,30 +376,25 @@ We created **three** app pieces:
    - Static assets directory: \`$APPDIR/mt-static\`
 
 2. **${APPNAME}_site** (**STA**) — the first **published site directory** (static HTML)  
-   - Path: \`$SITEDIR\`  
-   - We created a symlink: \`$SITEDIR/mt-static -> $APPDIR/mt-static\`
+   - Path: \`$SITEDIR\`
 
 3. **${APPNAME}_site_static** (**SLS**) — nginx symlink-static app that **serves** the published site  
-   - \`json.sym_link_path\`: \`$SITEDIR\` (entire site dir is served)
+   - \`json.sym_link_path\`: \`$SYMLINK_TARGET\` (full path to the site's \`mt-static\` symlink)
 
 ## Routing (subdomains)
 
 - Route a subdomain (e.g. \`mt.yourdomain.com\`) to **$APPNAME**.  
 - Route another subdomain (e.g. \`blog.yourdomain.com\`) to **${APPNAME}_site_static**.
 
-This mirrors the screenshot: the **site** sees \`mt-static/\` because the site directory contains a symlink pointing back to the MT static assets.
+This mirrors the screenshot: the **site** references \`mt-static/\`; the platform-level **SLS** configuration serves that symlink path.
 
 ## Additional sites later
 
 For more sites, repeat:
 
 1. Create another app via API: type **STA** named like \`${APPNAME}_site2\`.  
-2. Inside that new site dir, run:  
-   \`\`\`bash
-   ln -s "/home/$USER/apps/$APPNAME/mt-static" "/home/$USER/apps/${APPNAME}_site2/mt-static"
-   \`\`\`
-3. Create another **SLS** app with \`json.sym_link_path\` pointing to that new site dir.
-4. Route a new subdomain to that new **SLS** app.
+2. Create another **SLS** app with \`json.sym_link_path\` set to \`/home/$USER/apps/${APPNAME}_site2/mt-static\`.  
+3. Route a new subdomain to that new **SLS** app.
 
 MD
 echo "[ok] README.md written" >> "$LOGFILE"
@@ -417,7 +405,7 @@ echo "[step] POST app/installed" >> "$LOGFILE"
   && echo "[ok] app/installed" >> "$LOGFILE"
 
 # === Notice ===
-firstLine="Admin bootstrap: /mt.cgi — Site app: ${SITE_APP_NAME} (STA); Static link app: ${LINK_APP_NAME} (SLS, json.sym_link_path=$SITEDIR). See $APPDIR/README.md."
+firstLine="Admin bootstrap: /mt.cgi — Site app: ${SITE_APP_NAME} (STA); Static link app: ${LINK_APP_NAME} (SLS, json.sym_link_path=$SYMLINK_TARGET). See $APPDIR/README.md."
 echo "[step] POST notice/create" >> "$LOGFILE"
 /usr/bin/curl -s -X POST \
   --header "Content-Type:application/json" \
