@@ -1,6 +1,6 @@
 #! /bin/bash
 # Opalstack Movable Type installer.
-# Adds: secondary APA site app, README.md, and nginx symlink-static app for published site.
+# Adds: SITE app (STA static-only), README.md, and SLS symlink-static app that serves the SITE dir.
 # THIS LINE
 
 CRED2='\033[1;91m'        # Red
@@ -12,11 +12,45 @@ CCYAN2='\033[1;96m'       # Cyan
 CWHITE2='\033[1;97m'      # White
 CEND='\033[0m'            # Text Reset
 
-# --- App type codes (override via env if needed) ---
-# APA app type used for site dir creation (same family as the main app)
-SITE_APA_TYPE="${SITE_APA_TYPE:-apache_php_8.2}"
-# Nginx "symlink static" app type (serves a target path via symlink)
-SYMLINK_APP_TYPE="${SYMLINK_APP_TYPE:-static_symlink}"
+# --- App type codes (panel codes) ---
+SITE_APP_TYPE="STA"     # Static Only (creates site dir)
+SYMLINK_APP_TYPE="SLS"  # Symbolic link, Static only (nginx serves target path)
+
+# --- noisy curl helpers (capture HTTP code + body) ---
+curl_json_post() { # endpoint json_payload -> sets CURL_STATUS CURL_BODY
+  local endpoint="$1"; shift
+  local payload="$1"
+  local tmp="$(mktemp)"
+  CURL_STATUS=$(
+    curl -sS -w '%{http_code}' -o "$tmp" \
+      -H "Authorization: Token $OPAL_TOKEN" \
+      -H "Content-Type: application/json" \
+      -d "$payload" \
+      "$API_URL$endpoint" || echo "000"
+  )
+  CURL_BODY="$(cat "$tmp")"
+  rm -f "$tmp"
+}
+
+curl_json_get() { # endpoint -> sets CURL_STATUS CURL_BODY
+  local endpoint="$1"
+  local tmp="$(mktemp)"
+  CURL_STATUS=$(
+    curl -sS -w '%{http_code}' -o "$tmp" \
+      -H "Authorization: Token $OPAL_TOKEN" \
+      -H "Content-Type: application/json" \
+      "$API_URL$endpoint" || echo "000"
+  )
+  CURL_BODY="$(cat "$tmp")"
+  rm -f "$tmp"
+}
+
+fail_now() {
+  printf "$CRED2"; echo "$1"; printf "$CEND"
+  echo "[fail] $1" >> "$LOGFILE"
+  echo "[fail] http=$CURL_STATUS body=$CURL_BODY" >> "$LOGFILE"
+  exit 1
+}
 
 # i is for UUID, n is for app name
 while getopts i:n: option
@@ -57,29 +91,26 @@ else
   exit 1
 fi
 
-# === API: validate UUID / get server id ===
-echo "[step] validate app UUID and fetch server id" >> "$LOGFILE"
-if serverjson=$(curl -s --fail --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN"  "$API_URL/api/v1/app/read/$UUID"); then
-     printf $CGREEN2; echo 'UUID validation and server lookup OK.'; printf $CEND
-     serverid=$(echo "$serverjson" | /usr/bin/jq -r .server)
-     echo "[ok] app/read; server=$serverid" >> "$LOGFILE"
-else
-     printf $CRED2; echo 'UUID validation and server lookup failed.'; printf $CEND
-     echo "[fail] app/read" >> "$LOGFILE"
-     exit 1
+# === API: validate UUID / get server + osuser ===
+echo "[step] validate app UUID and fetch server/osuser id" >> "$LOGFILE"
+curl_json_get "/api/v1/app/read/$UUID"
+if [[ "$CURL_STATUS" != 2* ]]; then
+  fail_now "app/read failed (uuid=$UUID)"
 fi
+serverid=$(echo "$CURL_BODY" | /usr/bin/jq -r .server)
+osuser_id=$(echo "$CURL_BODY" | /usr/bin/jq -r .osuser)
+echo "[ok] app/read; server=$serverid osuser=$osuser_id" >> "$LOGFILE"
+printf $CGREEN2; echo 'UUID validation and server/osuser lookup OK.'; printf $CEND
 
 # Get the the account email address (for notice text parity)
 echo "[step] fetch account email" >> "$LOGFILE"
-if accountjson=$(curl -s --fail --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN"  "$API_URL/api/v1/account/info/"); then
-     printf $CGREEN2; echo 'Admin email lookup OK.'; printf $CEND
-     accountemail=$(echo "$accountjson" | /usr/bin/jq -r .email)
-     echo "[ok] account/info; email=$accountemail" >> "$LOGFILE"
-else
-     printf $CRED2; echo 'Admin email lookup failed.'; printf $CEND
-     echo "[fail] account/info" >> "$LOGFILE"
-     exit 1
+curl_json_get "/api/v1/account/info/"
+if [[ "$CURL_STATUS" != 2* ]]; then
+  fail_now "account/info failed"
 fi
+accountemail=$(echo "$CURL_BODY" | /usr/bin/jq -r .email)
+echo "[ok] account/info; email=$accountemail" >> "$LOGFILE"
+printf $CGREEN2; echo 'Admin email lookup OK.'; printf $CEND
 
 # === create database user ===
 APPDB="${APPNAME:0:8}_${UUID:0:8}"
@@ -97,7 +128,6 @@ fi
 eval DBUSER=$DBUSER
 eval DBUSERID=$DBUSERID
 eval DBPWD=$DBPWD
-
 echo "Database User Created"
 echo "$DBUSER"
 echo "$DBUSERID"
@@ -133,7 +163,6 @@ else
      echo "[fail] mariadb/read init" >> "$LOGFILE"
      exit 1
 fi
-
 while [ "$DBOK" = false ]; do
   echo "$DBOK"
   /bin/sleep 5
@@ -158,7 +187,6 @@ else
      echo "[fail] mariauser/read init" >> "$LOGFILE"
      exit 1
 fi
-
 while [ "$DBUOK" = false ]; do
   echo "$DBUOK"
   /bin/sleep 5
@@ -252,74 +280,79 @@ echo "[step] chmod +x mt*.cgi" >> "$LOGFILE"
 /usr/bin/find "$APPDIR" -maxdepth 1 -type f -name '*.cgi' -exec chmod 755 {} + && echo "[ok] CGI perms set" >> "$LOGFILE"
 
 # --------------------------------------------------------------------
-# NEW: Create a second APA app to hold the first published site
+# Create SITE app (via API) to hold the first published site (STA static-only)
 # --------------------------------------------------------------------
 SITE_APP_NAME="${APPNAME}_site"
-SITEDIR="/home/$USER/apps/${SITE_APP_NAME}"
+echo "[step] app/create ${SITE_APP_NAME} type=${SITE_APP_TYPE}" >> "$LOGFILE"
 
-echo "[step] create APA site app $SITE_APP_NAME (type=$SITE_APA_TYPE)" >> "$LOGFILE"
-create_site_payload='[{"name": "'"$SITE_APP_NAME"'", "server": "'"$serverid"'", "type": "'"$SITE_APA_TYPE"'"}]'
-if site_create_json=$(curl -s --fail --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN" -d"$create_site_payload" "$API_URL/api/v1/app/create/"); then
-  SITE_APP_ID=$(echo "$site_create_json" | jq -r '.[0].id')
-  echo "[ok] app/create; ${SITE_APP_NAME} id=$SITE_APP_ID" >> "$LOGFILE"
-else
-  printf $CRED2; echo "Site app creation failed (${SITE_APP_NAME})."; printf $CEND
-  echo "[fail] app/create site" >> "$LOGFILE"
-  exit 1
+site_payload=$(jq -n \
+  --arg name "$SITE_APP_NAME" \
+  --arg osuser "$osuser_id" \
+  --arg type "$SITE_APP_TYPE" \
+  '[{name: $name, osuser: $osuser, type: $type}]')
+
+curl_json_post "/api/v1/app/create/" "$site_payload"
+
+if [[ "$CURL_STATUS" != 2* ]]; then
+  printf "$CRED2"; echo "Site app creation failed ($SITE_APP_NAME) — http=$CURL_STATUS"; printf "$CEND"
+  echo "$CURL_BODY"
+  echo "[payload] $site_payload" >> "$LOGFILE"
+  fail_now "site app create error"
 fi
 
-# wait for the site app to be ready (path created)
+SITE_APP_ID=$(echo "$CURL_BODY" | jq -r '.[0].id')
+echo "[ok] app/create; ${SITE_APP_NAME} id=$SITE_APP_ID body=$(echo "$CURL_BODY" | tr -d '\n' | cut -c1-400)" >> "$LOGFILE"
+
+# poll readiness
 echo "[step] poll site app readiness (id=$SITE_APP_ID)" >> "$LOGFILE"
-if site_ok_json=$(curl -s --fail --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN" "$API_URL/api/v1/app/read/$SITE_APP_ID"); then
-  SITE_READY=$(echo "$site_ok_json" | jq -r '.ready')
-else
-  SITE_READY=false
-fi
-while [ "$SITE_READY" = "false" ]; do
-  /bin/sleep 5
-  if site_ok_json=$(curl -s --fail --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN" "$API_URL/api/v1/app/read/$SITE_APP_ID"); then
-    SITE_READY=$(echo "$site_ok_json" | jq -r '.ready')
+while :; do
+  curl_json_get "/api/v1/app/read/$SITE_APP_ID"
+  if [[ "$CURL_STATUS" != 2* ]]; then
+    echo "[warn] app/read site http=$CURL_STATUS body=$CURL_BODY" >> "$LOGFILE"
+    sleep 3; continue
   fi
+  ready=$(echo "$CURL_BODY" | jq -r '.ready')
+  [[ "$ready" == "true" ]] && break
+  sleep 2
 done
 echo "[ok] site app ready" >> "$LOGFILE"
 
-# Bind mt-static into the site (matches your screenshot)
-echo "[step] create mt-static symlink in $SITEDIR" >> "$LOGFILE"
-/bin/mkdir -p "$SITEDIR"
-if [ ! -e "$SITEDIR/mt-static" ]; then
-  ln -s "$APPDIR/mt-static" "$SITEDIR/mt-static"
-  echo "[ok] symlink: $SITEDIR/mt-static -> $APPDIR/mt-static" >> "$LOGFILE"
-else
-  echo "[skip] mt-static symlink already exists" >> "$LOGFILE"
-fi
+# Paths (now created by panel)
+SITEDIR="/home/$USER/apps/${SITE_APP_NAME}"
 
-# Drop a tiny test page if none exists (optional QoL)
-if [ ! -e "$SITEDIR/index.html" ]; then
-  cat > "$SITEDIR/index.html" <<'HTML'
-<!doctype html><meta charset="utf-8">
-<title>Movable Type Published Site</title>
-<link rel="stylesheet" href="styles.css">
-<h1>It works.</h1>
-<p>This is your first published site directory.</p>
-<p>Static assets are served via <code>mt-static/</code> symlink.</p>
-HTML
-  echo "body{font-family:system-ui,Arial,sans-serif;margin:2rem}" > "$SITEDIR/styles.css"
+# Bind mt-static into the site (matches screenshot)
+echo "[step] bind mt-static into site dir" >> "$LOGFILE"
+if [ ! -e "$SITEDIR/mt-static" ]; then
+  ln -s "/home/$USER/apps/$APPNAME/mt-static" "$SITEDIR/mt-static"
+  echo "[ok] $SITEDIR/mt-static -> /home/$USER/apps/$APPNAME/mt-static" >> "$LOGFILE"
+else
+  echo "[skip] mt-static already present" >> "$LOGFILE"
 fi
 
 # --------------------------------------------------------------------
-# NEW: Create an nginx SYMLINK-STATIC app that serves the site directory
+# Create SLS app (nginx symlink-static) pointing to the SITE directory
 # --------------------------------------------------------------------
 LINK_APP_NAME="${APPNAME}_site_static"
-echo "[step] create nginx symlink-static app $LINK_APP_NAME (type=$SYMLINK_APP_TYPE)" >> "$LOGFILE"
-create_link_payload='[{"name": "'"$LINK_APP_NAME"'", "server": "'"$serverid"'", "type": "'"$SYMLINK_APP_TYPE"'", "path": "'"$SITEDIR"'"}]'
-if link_create_json=$(curl -s --fail --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN" -d"$create_link_payload" "$API_URL/api/v1/app/create/"); then
-  LINK_APP_ID=$(echo "$link_create_json" | jq -r '.[0].id')
-  echo "[ok] app/create; ${LINK_APP_NAME} id=$LINK_APP_ID path=$SITEDIR" >> "$LOGFILE"
-else
-  printf $CRED2; echo "Symlink-static app creation failed (${LINK_APP_NAME})."; printf $CEND
-  echo "[fail] app/create symlink" >> "$LOGFILE"
-  exit 1
+echo "[step] app/create ${LINK_APP_NAME} type=${SYMLINK_APP_TYPE} -> $SITEDIR" >> "$LOGFILE"
+
+link_payload=$(jq -n \
+  --arg name "$LINK_APP_NAME" \
+  --arg osuser "$osuser_id" \
+  --arg type "$SYMLINK_APP_TYPE" \
+  --arg path "$SITEDIR" \
+  '[{name: $name, osuser: $osuser, type: $type, path: $path}]')
+
+curl_json_post "/api/v1/app/create/" "$link_payload"
+
+if [[ "$CURL_STATUS" != 2* ]]; then
+  printf "$CRED2"; echo "Symlink app creation failed ($LINK_APP_NAME) — http=$CURL_STATUS"; printf "$CEND"
+  echo "$CURL_BODY"
+  echo "[payload] $link_payload" >> "$LOGFILE"
+  fail_now "symlink app create error"
 fi
+
+LINK_APP_ID=$(echo "$CURL_BODY" | jq -r '.[0].id')
+echo "[ok] app/create; ${LINK_APP_NAME} id=$LINK_APP_ID body=$(echo "$CURL_BODY" | tr -d '\n' | cut -c1-400)" >> "$LOGFILE"
 
 # === README explaining structure and routing ===
 README="$APPDIR/README.md"
@@ -334,11 +367,11 @@ We created **three** app pieces:
    - Bootstrap: \`/mt.cgi\`  
    - Static assets directory: \`$APPDIR/mt-static\`
 
-2. **${APPNAME}_site** (APA) — the first **published site directory**  
+2. **${APPNAME}_site** (**STA**) — the first **published site directory** (static HTML)  
    - Path: \`$SITEDIR\`  
    - We created a symlink: \`$SITEDIR/mt-static -> $APPDIR/mt-static\`
 
-3. **${APPNAME}_site_static** (Nginx symlink-static) — serves the published site  
+3. **${APPNAME}_site_static** (**SLS**) — nginx symlink-static app that **serves** the published site  
    - Target path: \`$SITEDIR\`
 
 ## Routing (subdomains)
@@ -352,15 +385,13 @@ This mirrors the screenshot: the **site** sees \`mt-static/\` because the site d
 
 For more sites, repeat:
 
-1. Create another APA app named like \`${APPNAME}_site2\` (or any name) — this makes the directory under \`/home/$USER/apps/\`.
-2. Inside that site dir, run:  
+1. Create another app via API: type **STA** named like \`${APPNAME}_site2\` (this creates its directory).  
+2. Inside that new site dir, run:  
    \`\`\`bash
    ln -s "/home/$USER/apps/$APPNAME/mt-static" "/home/$USER/apps/${APPNAME}_site2/mt-static"
    \`\`\`
-3. Create another **nginx symlink-static** app pointing to that new site dir.
-4. Route a new subdomain to that new symlink-static app.
-
-That’s it — each site gets its own subdomain; the MT admin app has its own subdomain.
+3. Create another **SLS** app pointing to that new site dir.
+4. Route a new subdomain to that new **SLS** app.
 
 MD
 echo "[ok] README.md written" >> "$LOGFILE"
@@ -371,12 +402,12 @@ echo "[step] POST app/installed" >> "$LOGFILE"
   && echo "[ok] app/installed" >> "$LOGFILE"
 
 # === Notice ===
-firstLine="Admin bootstrap: /mt.cgi — Site dir created: ${SITE_APP_NAME} (symlink-static app: ${LINK_APP_NAME})"
+firstLine="Admin bootstrap: /mt.cgi — Site app: ${SITE_APP_NAME} (STA); Static link app: ${LINK_APP_NAME} (SLS). See $APPDIR/README.md."
 echo "[step] POST notice/create" >> "$LOGFILE"
 /usr/bin/curl -s -X POST \
   --header "Content-Type:application/json" \
   --header "Authorization: Token $OPAL_TOKEN" \
-  -d'[{"type": "D", "content":"'"Created Movable Type app $APPNAME for $accountemail — $firstLine. DB: $DBNAME / $DBUSER. See $APPDIR/README.md for routing instructions."'"}]' \
+  -d'[{"type": "D", "content":"'"Created Movable Type app $APPNAME for $accountemail — $firstLine DB: $DBNAME / $DBUSER."'"}]' \
   "$API_URL/api/v1/notice/create/" && echo "[ok] notice/create" >> "$LOGFILE"
 
 printf 'Completed at %(%F %T)T\n' >> "$LOGFILE"
