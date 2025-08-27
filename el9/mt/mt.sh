@@ -319,7 +319,7 @@ echo "[ok] site app ready" >> "$LOGFILE"
 
 # Panel has created the site directory. DO NOT manually create any symlink here.
 SITEDIR="/home/$USER/apps/${SITE_APP_NAME}"
-SYMLINK_TARGET="$SITEDIR/mt-static"   # final full path for SLS to serve
+SYMLINK_TARGET="$APPDIR/mt-static"   # final full path for SLS to serve
 
 # --------------------------------------------------------------------
 # Create SLS app (nginx symlink-static) pointing to the **symlink path**
