@@ -136,6 +136,7 @@ def download_and_extract_tag(tag, dest_dir):
 def main():
     parser = argparse.ArgumentParser(description="Install Discourse from source (no Docker) on Opalstack")
     parser.add_argument("-i", dest="uuid", default=os.environ.get("UUID"))
+    parser.add_argument("-n", dest="name", default=os.environ.get("APPNAME"))  # accept -n to match launcher
     parser.add_argument("-t", dest="token", default=os.environ.get("OPAL_TOKEN"))
     parser.add_argument("-u", dest="user", default=os.environ.get("OPAL_USER"))
     parser.add_argument("-p", dest="password", default=os.environ.get("OPAL_PASS"))
@@ -220,7 +221,7 @@ def main():
     secret_hex = secrets.token_hex(64)  # 128 hex chars
     hostname_placeholder = "forum.example.com"
 
-    # per-forum Redis via UNIX socket per Opalstack forum guidance
+    # per-forum Redis via UNIX socket
     redis_sock = f"{srcdir}/tmp/sockets/redis.sock"
 
     discourse_conf = textwrap.dedent(f"""\
@@ -245,8 +246,7 @@ def main():
     """)
     create_file(f"{srcdir}/config/discourse.conf", discourse_conf, perms=0o600)
 
-    # -------- create redis.conf matching forum instructions --------
-    # port 0 + unixsocket + perms + daemonize yes + pidfile/logfile
+    # -------- create redis.conf (unix socket, no TCP) --------
     redis_conf = textwrap.dedent(f"""\
     port 0
     unixsocket {redis_sock}
@@ -294,8 +294,7 @@ def main():
     # env
     source "$APPDIR/setenv"
 
-    # ---- Redis (per Opalstack forum: use socket, no TCP port) ----
-    # https://community.opalstack.com/d/975-redis-instance-for-django-app-wcelery
+    # ---- Redis (socket, no TCP) ----
     if [ -f "$SRCDIR/tmp/pids/redis.pid" ] && kill -0 $(cat "$SRCDIR/tmp/pids/redis.pid") 2>/dev/null; then
       echo "==> redis already running"
     else
@@ -344,7 +343,7 @@ def main():
       rm -f "$SRCDIR/tmp/pids/sidekiq.pid"
     fi
 
-    # Redis (prefer graceful shutdown via socket)
+    # Redis
     if [ -f "$SRCDIR/tmp/pids/redis.pid" ]; then
       /bin/scl enable rh-redis5 -- redis-cli -s "$SRCDIR/tmp/sockets/redis.sock" shutdown || kill $(cat "$SRCDIR/tmp/pids/redis.pid") || true
       rm -f "$SRCDIR/tmp/pids/redis.pid"
@@ -366,8 +365,6 @@ def main():
     - Front nginx is Opalstack's; this app binds **Puma** to 127.0.0.1:{port}.
     - **Sidekiq** handles jobs.
     - **Redis** runs locally as a **UNIX socket** at: `{srcdir}/tmp/sockets/redis.sock`
-      (started with `scl enable rh-redis5 -- redis-server {appdir}/redis.conf`) per the Opalstack forum guidance. 
-      Change to TCP only if you intentionally create a proxy port app.  :contentReference[oaicite:1]{{index=1}}
 
     ## Start/Stop
     {appdir}/start  
