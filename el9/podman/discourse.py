@@ -253,7 +253,7 @@ def main():
         else
           printf "hostname = %s\\n" "$H" >> config/discourse.conf
         fi
-        RAILS_ENV=production bin/rails r '\''puts "GlobalSetting.hostname => #{GlobalSetting.hostname.inspect}"'\'
+        RAILS_ENV=production bin/rails r "puts \\"GlobalSetting.hostname => #{{GlobalSetting.hostname.inspect}}\\""
       '
 
       echo "[install] quick health probe"
