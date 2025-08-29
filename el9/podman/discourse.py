@@ -1,24 +1,43 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
 """
-Discourse on Opalstack (EL9 + Podman, rootless) — unified one-click installer
+Discourse on Opalstack (EL9 + Podman, rootless) — one-click installer
 
 WHAT THIS DOES:
-- Writes scripts, env, and a panel notice. No long-running tasks here.
-- The generated **start** script:
-  - (Always) recreates the pod bound to the app port and starts postgres/redis/web.
-  - (First run only) performs install work, then writes ".installed".
-  - (Subsequent runs) just starts cleanly without redoing install work.
+- Only writes files, cron, and a panel notice. **No image pulls, no starts**.
+- User later runs: start/stop/update/check/diagnose and **finish_install** (README explains).
 
-EXTRAS:
-- debug_on / debug_off scripts toggle a safe prepend-based CSS/hostname patch and clear caches.
-- stop / update scripts included.
+ARCH / WHERE THINGS RUN:
+- Postgres + Redis + Web all run **inside a single Podman pod** bound to the Opalstack app port.
+- Pod is recreated on each start with `-p 127.0.0.1:${PORT}:3000`.
+
+KEY FIXES:
+- **Init moved out of start**: migrations, PG extensions, and asset build live in `finish_install`.
+- **CSS crash guard**: clears caches, clobbers, precompiles, verifies real CSS; retries once.
+- **git safe.directory**: `/app` marked safe to avoid “dubious ownership”.
+- **Rootless cgroups**: `CONTAINERS_CGROUP_MANAGER=cgroupfs` + `--cgroups=disabled`.
+- **PG perms**: `podman unshare` to avoid EPERM.
+- **Ultra-verbose start**: timestamps, container logs follow, asset counter every 5s.
+- **Duplicate Automation plugin**: nuked in data dir to avoid redefinition spam.
+- **Fontconfig spam**: `XDG_CACHE_HOME=/data/cache`.
+- **Port certainty**: pod recreated every start with explicit `-p 127.0.0.1:${PORT}:3000`.
+
+Change image via env if you want:
+  DISCOURSE_IMAGE, REDIS_IMAGE, POSTGRES_IMAGE
+Default images:
+  Web/Sidekiq: docker.io/tiredofit/discourse:latest
+  Redis:       docker.io/library/redis:7-alpine
+  Postgres:    docker.io/library/postgres:16-alpine
 """
 
-import argparse, sys, os, json, logging, http.client, subprocess, shlex, secrets, string, textwrap, time
+import argparse, sys, os, json, logging, http.client, subprocess, shlex, secrets, string, textwrap, random, time
 
 # ---------- Config ----------
-API_URL = (os.environ.get('OPAL_API_URL') or os.environ.get('API_URL') or 'https://my.opalstack.com').rstrip('/')
+API_URL = (
+    os.environ.get('OPAL_API_URL')
+    or os.environ.get('API_URL')
+    or 'https://my.opalstack.live'
+).rstrip('/')
 API_HOST = API_URL.replace('https://', '').replace('http://', '')
 API_BASE_URI = '/api/v1'
 
@@ -63,7 +82,6 @@ class OpalAPI:
 
 # ---------- helpers ----------
 def pw(n=24):
-    import secrets, string
     chars = string.ascii_letters + string.digits
     return ''.join(secrets.choice(chars) for _ in range(n))
 
@@ -82,6 +100,25 @@ def write(path, content, mode=0o600):
     with open(path, 'w') as f: f.write(content)
     os.chmod(path, mode)
     logging.info(f'Created file {path} perms={oct(mode)}')
+
+def add_cron(line):
+    home = os.path.expanduser('~')
+    tmp = f'{home}/.tmp{pw(8)}'
+    try:
+        existing = subprocess.check_output('crontab -l'.split(), stderr=subprocess.STDOUT).decode()
+    except subprocess.CalledProcessError:
+        existing = ''
+    if line in existing:
+        logging.info(f'Cron already present: {line}')
+        return
+    with open(tmp, 'w') as t:
+        t.write(existing)
+        if existing and not existing.endswith('\n'):
+            t.write('\n')
+        t.write(line + '\n')
+    sh(f'crontab {tmp}')
+    os.remove(tmp)
+    logging.info(f'Added cron: {line}')
 
 # ---------- main ----------
 def main():
@@ -111,7 +148,7 @@ def main():
     logging.info(f'Preparing Discourse for app "{appname}" (port {port})')
 
     # dirs
-    sh(f'mkdir -p {appdir}/data {appdir}/data/logs {appdir}/data/plugins {appdir}/data/cache')
+    sh(f'mkdir -p {appdir}/data')
     sh(f'mkdir -p {appdir}/pgdata')
     sh(f'mkdir -p {logdir}')
 
@@ -136,7 +173,7 @@ def main():
     REDIS_HOST=127.0.0.1
     REDIS_PORT=6379
 
-    # Admin bootstrap (change if desired — some images auto-use these)
+    # Admin bootstrap (change if desired)
     ADMIN_USER={admin_user}
     ADMIN_EMAIL={admin_email}
     ADMIN_PASS={admin_pass}
@@ -153,9 +190,12 @@ def main():
     # ---- scripts ----
     start = textwrap.dedent(f"""\
     #!/bin/bash
-    # Unified start: always (re)creates pod + containers. On first run, performs install, writes ".installed".
+    # Start/attach only. **No init here** — run finish_install after first start.
     set -Eeuo pipefail
     export CONTAINERS_CGROUP_MANAGER=cgroupfs
+    export TIMEFORMAT='[time] %3lR'
+    export PS4='+ $(date "+%Y-%m-%d %H:%M:%S") [${{BASH_SOURCE##*/}}:${{LINENO}}] '
+    set -x
 
     APP="{appname}"
     POD="$APP-pod"
@@ -165,182 +205,331 @@ def main():
     IMG_WEB="{IMG_WEB}"
     IMG_REDIS="{IMG_REDIS}"
     IMG_PG="{IMG_PG}"
-    INSTALLED_FILE="$APPDIR/.installed"
+    HEALTH_URL="http://127.0.0.1:${{PORT}}/"
 
-    echo "==> [{appname}] start: images:"
-    echo "    web:   $IMG_WEB"
-    echo "    redis: $IMG_REDIS"
-    echo "    pg:    $IMG_PG"
-    echo "==> port: $PORT"
+    echo "### [start] Using images:"
+    echo "    WEB:   $IMG_WEB"
+    echo "    REDIS: $IMG_REDIS"
+    echo "    PG:    $IMG_PG"
+    echo "### [start] App port (from API): $PORT"
 
+    # Lock issues sometimes happen on multi-tenant hosts
     podman system renumber || true
 
-    podman pod rm -f "$POD" >/dev/null 2>&1 || true
+    echo "### [start] Recreate pod to lock correct port"
+    podman pod rm -f "$POD" || true
     if ss -ltn '( sport = :'$PORT' )' | grep -q LISTEN; then
-      echo "ERROR: Port $PORT already in use on host."
+      echo "!!! Port $PORT is already in use on host:"
       ss -ltnp '( sport = :'$PORT' )' || true
       exit 1
     fi
-    podman pod create --name "$POD" -p 127.0.0.1:${{PORT}}:3000 >/dev/null
+    podman --log-level=debug pod create --name "$POD" -p 127.0.0.1:${{PORT}}:3000
 
+    echo "### [start] Ensure dirs + perms"
     mkdir -p "$LOGDIR" "$APPDIR/pgdata" "$APPDIR/data" "$APPDIR/data/logs" "$APPDIR/data/plugins" "$APPDIR/data/cache"
     chmod 0777 "$LOGDIR" || true
+    # avoid duplicate Automation plugin (image already includes it)
     rm -rf "$APPDIR/data/plugins/automation" || true
-
+    # postgres perms inside userns
     podman unshare chown -R 999:999 "$APPDIR/pgdata" || true
     podman unshare chmod -R 0770 "$APPDIR/pgdata" || true
 
+    echo "### [start] Export env"
     set -a; source "$APPDIR/.env"; set +a
 
-    echo "==> start postgres"
-    podman rm -f "$APP-postgres" >/dev/null 2>&1 || true
-    podman run --cgroups=disabled -d --name "$APP-postgres" --pod "$POD" \\
+    echo "### [start] Start Postgres"
+    podman rm -f "$APP-postgres" || true
+    podman --log-level=debug run --cgroups=disabled -d --name "$APP-postgres" --pod "$POD" \\
       -e POSTGRES_USER="$DB_USER" \\
       -e POSTGRES_PASSWORD="$DB_PASS" \\
       -e POSTGRES_DB="$DB_NAME" \\
       -v "$APPDIR/pgdata:/var/lib/postgresql/data" \\
-      "$IMG_PG" >/dev/null
+      "$IMG_PG"
 
+    echo "### [start] Wait for PG ready"
     for i in $(seq 1 120); do
       if podman exec "$APP-postgres" sh -lc 'pg_isready -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" >/dev/null 2>&1'; then
+        echo "[pg] ready"
         break
       fi
       sleep 1
-      [[ $i -eq 120 ]] && {{ echo "ERROR: postgres not ready"; exit 1; }}
+      if [[ $i -eq 120 ]]; then
+        echo "!!! postgres not ready, abort"
+        exit 1
+      fi
     done
 
-    echo "==> start redis"
-    podman rm -f "$APP-redis" >/dev/null 2>&1 || true
-    podman run --cgroups=disabled -d --name "$APP-redis" --pod "$POD" "$IMG_REDIS" >/dev/null
+    echo "### [start] Start Redis"
+    podman rm -f "$APP-redis" || true
+    podman --log-level=debug run --cgroups=disabled -d --name "$APP-redis" --pod "$POD" "$IMG_REDIS"
 
-    echo "==> launch web"
-    podman rm -f "$APP" >/dev/null 2>&1 || true
-    podman run --cgroups=disabled -d --name "$APP" --pod "$POD" \\
+    echo "### [start] Launch Discourse (web+sidekiq)"
+    podman rm -f "$APP" || true
+    podman --log-level=debug run --cgroups=disabled -d --name "$APP" --pod "$POD" \\
       -v "$APPDIR/data:/data" \\
       -v "$LOGDIR:/data/logs" \\
       --env-file "$APPDIR/.env" \\
       -e XDG_CACHE_HOME=/data/cache \\
       --label io.containers.autoupdate=registry \\
-      "$IMG_WEB" >/dev/null
+      "$IMG_WEB"
 
-    # -------- First-run install (one-time) --------
-    if [[ ! -f "$INSTALLED_FILE" ]]; then
-      echo "==> first run: installing (migrate, PG extensions, hostname)"
-
-      echo "[install] create PG extensions (hstore, pg_trgm)"
-      podman exec "$APP-postgres" sh -lc 'psql -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -Atc "CREATE EXTENSION IF NOT EXISTS hstore; CREATE EXTENSION IF NOT EXISTS pg_trgm;"'
-
-      echo "[install] safe git ownership for /app"
-      podman exec "$APP" git config --global --add safe.directory /app || true
-
-      echo "[install] rails db:migrate"
-      podman exec "$APP" bash -lc 'cd /app && RAILS_ENV=production bundle exec rake db:migrate'
-
-      echo "[install] ensure hostname in config/discourse.conf"
-      podman exec "$APP" bash -lc 'set -e
-        cd /app
-        test -f config/discourse.conf || cp config/discourse_defaults.conf config/discourse.conf
-        H="${{DISCOURSE_HOSTNAME:-wildcard.local}}"
-        if grep -q "^hostname" config/discourse.conf; then
-          sed -i "s/^hostname.*/hostname = ${{H}}/" config/discourse.conf
-        else
-          printf "hostname = %s\\n" "$H" >> config/discourse.conf
-        fi
-        RAILS_ENV=production bin/rails r '\''puts "GlobalSetting.hostname => #{{GlobalSetting.hostname.inspect}}"'\''
-      '
-
-      echo "[install] quick health probe"
-      curl -sS -o /dev/null -w "HTTP %{{http_code}}\\n" "http://127.0.0.1:${{PORT}}/" || true
-
-      date > "$INSTALLED_FILE"
-      echo "==> install complete; wrote $INSTALLED_FILE"
-    else
-      echo "==> already installed; skipping install phase"
-    fi
-
-    echo "==> containers:"
+    echo "### [start] Containers:"
     podman ps --format "table {{{{.Names}}}}\\t{{{{.Status}}}}\\t{{{{.Image}}}}\\t{{{{.Ports}}}}"
 
-    echo "==> done. tip: podman logs -f {appname}"
+    echo "### [start] LIVE LOG + ASSET PROGRESS (Ctrl-C to stop following; app keeps running)"
+    (
+      set +x
+      podman logs -f "$APP" &
+      LOGPID=$!
+      trap "kill -9 $LOGPID >/dev/null 2>&1 || true" INT TERM EXIT
+      for i in $(seq 1 300); do
+        files=$(podman exec "$APP" bash -lc 'ls -1 /app/public/assets 2>/dev/null | wc -l' 2>/dev/null || echo 0)
+        size=$(podman exec "$APP" bash -lc 'du -sh /app/public/assets 2>/dev/null | cut -f1' 2>/dev/null || echo 0)
+        echo "[assets] files=$files size=$size"
+        code=$(curl -sS -o /dev/null -w "HTTP %{{http_code}}" "$HEALTH_URL" || true)
+        echo "[health] $HEALTH_URL -> $code"
+        sleep 5
+      done
+      kill -9 $LOGPID >/dev/null 2>&1 || true
+      trap - INT TERM EXIT
+    )
+
+    echo "### [start] Done. If first boot, run: {appdir}/finish_install"
+    echo "### [start] Health probe: curl -sS -o /dev/null -w 'HTTP %{{http_code}}\\n' $HEALTH_URL"
     """)
 
     stop = textwrap.dedent(f"""\
     #!/bin/bash
     set -Eeuo pipefail
     export CONTAINERS_CGROUP_MANAGER=cgroupfs
+    set -x
     APP="{appname}"
     POD="$APP-pod"
-    podman rm -f "$APP" "$APP-redis" "$APP-postgres" >/dev/null 2>&1 || true
-    podman pod rm -f "$POD" >/dev/null 2>&1 || true
-    echo "[stop] {appname} stopped"
+    podman rm -f "$APP" "$APP-redis" "$APP-postgres" || true
+    podman pod rm -f "$POD" || true
+    echo "[stop] stopped {appname}"
     """)
 
     update = textwrap.dedent(f"""\
     #!/bin/bash
     set -Eeuo pipefail
     export CONTAINERS_CGROUP_MANAGER=cgroupfs
+    set -x
     "{appdir}/stop" || true
     "{appdir}/start"
     """)
 
-    debug_on = textwrap.dedent(f"""\
+    check = textwrap.dedent(f"""\
     #!/bin/bash
-    # Applies safe prepend-based stylesheet/hostname patch, clears caches, restarts web.
     set -Eeuo pipefail
     export CONTAINERS_CGROUP_MANAGER=cgroupfs
+    set -x
     APP="{appname}"
-    echo "[debug_on] applying prepend patch + cache clear"
-    podman exec "$APP" bash -lc '
-      set -e
-      cd /app
-      rm -f config/initializers/010-wildcard_styles.rb \\
-            config/initializers/zzz-hostname-hotfix.rb \\
-            config/initializers/_hostname_guard.rb || true
-
-      cat > config/initializers/010-wildcard_styles.rb << "RUBY"
-      module WildcardStyles
-        def current_hostname
-          base = (defined?(super) ? super() : nil)
-          (base.respond_to?(:presence) ? base.presence : base) ||
-            (ENV["DISCOURSE_HOSTNAME"].to_s.strip.presence rescue nil) ||
-            (ENV["HOSTNAME"].to_s.strip.presence rescue nil) ||
-            "wildcard"
-        end
-        def theme_digest
-          Digest::SHA1.hexdigest(
-            scss_digest.to_s + color_scheme_digest.to_s + settings_digest + uploads_digest + current_hostname.to_s
-          )
-        end
-      end
-      Rails.configuration.to_prepare do
-        if defined?(::Stylesheet::Manager::Builder)
-          ::Stylesheet::Manager::Builder.prepend(WildcardStyles)
-        end
-      end
-RUBY
-      RAILS_ENV=production bin/rails r "Stylesheet::Manager.cache.clear; Rails.cache.clear"
-    '
-    podman restart "$APP" >/dev/null
-    echo "[debug_on] done"
+    need=0
+    for c in "$APP-postgres" "$APP-redis" "$APP"; do
+      state=$(podman inspect -f '{{{{.State.Running}}}}' "$c" 2>/dev/null || echo "false")
+      [[ "$state" != "true" ]] && need=1
+    done
+    if [[ "$need" -eq 1 ]]; then
+      echo "[check] one or more containers down; restarting..."
+      "{appdir}/start"
+    else
+      echo "[check] all good"
+    fi
     """)
 
-    debug_off = textwrap.dedent(f"""\
+    logs_sh = textwrap.dedent(f"""\
     #!/bin/bash
-    # Removes our debug/prepend patch, clears caches, restarts web.
     set -Eeuo pipefail
     export CONTAINERS_CGROUP_MANAGER=cgroupfs
+    set -x
+    tail -F "{logdir}/discourse.log" "{logdir}/unicorn.log" "{logdir}/unicorn-error.log" "{logdir}/sidekiq.log" 2>/dev/null
+    """)
+
+    diagnose = textwrap.dedent(f"""\
+    #!/bin/bash
+    set -Eeuo pipefail
+    export CONTAINERS_CGROUP_MANAGER=cgroupfs
+    set -x
     APP="{appname}"
-    echo "[debug_off] removing patch + cache clear"
+    PORT="{port}"
+    LOGDIR="{logdir}"
+
+    echo "=== POD ==="
+    podman pod ps
+
+    echo "=== CONTAINERS ==="
+    podman ps --format "table {{{{.Names}}}}\\t{{{{.Status}}}}\\t{{{{.Image}}}}\\t{{{{.Ports}}}}"
+
+    echo -e "\\n=== HOST PORT CHECK ==="
+    curl -sS -o /dev/null -w "HTTP %{{http_code}}\\n" "http://127.0.0.1:${{PORT}}/" || true
+
+    echo -e "\\n=== REDIS PING ==="
+    podman exec "$APP-redis" sh -lc 'redis-cli -h 127.0.0.1 -p 6379 ping' || echo "redis ping failed"
+
+    echo -e "\\n=== PG READY? ==="
+    podman exec "$APP-postgres" sh -lc 'pg_isready -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
+
+    echo -e "\\n=== LAST LOGS ==="
+    ls -lh "$LOGDIR" | sed 's/^/    /'
+    for f in "$LOGDIR"/discourse.log "$LOGDIR"/unicorn*.log "$LOGDIR"/sidekiq.log; do
+      echo "--- $f"
+      tail -n 200 "$f" 2>/dev/null || true
+      echo
+    done
+    """)
+
+    dbext = textwrap.dedent(f"""\
+    #!/bin/bash
+    set -Eeuo pipefail
+    export CONTAINERS_CGROUP_MANAGER=cgroupfs
+    set -x
+    APP="{appname}"
+    echo "[dbext] creating hstore/pg_trgm..."
+    for i in $(seq 1 120); do
+      if podman exec "$APP-postgres" sh -lc 'pg_isready -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" >/dev/null 2>&1'; then
+        podman exec "$APP-postgres" sh -lc 'psql -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -Atc "CREATE EXTENSION IF NOT EXISTS hstore; CREATE EXTENSION IF NOT EXISTS pg_trgm;"'
+        echo "[dbext] done."
+        exit 0
+      fi
+      sleep 1
+    done
+    echo "[dbext] postgres not ready"; exit 1
+    """)
+
+    migrate = textwrap.dedent(f"""\
+    #!/bin/bash
+    set -Eeuo pipefail
+    export CONTAINERS_CGROUP_MANAGER=cgroupfs
+    set -x
+    APP="{appname}"
+    echo "[migrate] running rails db:migrate (inside container)..."
+    podman exec "$APP" bash -lc 'cd /app && RAILS_ENV=production bundle exec rake db:migrate' || true
+    echo "[migrate] complete."
+    """)
+
+    finish_install = textwrap.dedent(f"""\
+    #!/bin/bash
+    # First-run init: PG ready → extensions → db:migrate → assets (CSS crash guard) → success banner.
+    set -Eeuo pipefail
+    export CONTAINERS_CGROUP_MANAGER=cgroupfs
+    export PS4='+ $(date "+%Y-%m-%d %H:%M:%S") [${{BASH_SOURCE##*/}}:${{LINENO}}] '
+    set -x
+
+    APP="{appname}"
+    POD="$APP-pod"
+    APPDIR="{appdir}"
+
+    # Load env
+    set -a; source "$APPDIR/.env"; set +a
+
+    # Clean duplicate Automation plugin in data dir (image already ships it)
+    rm -rf "$APPDIR/data/plugins/automation" || true
+
+    # Podman lock index sometimes needs a nudge on shared hosts
+    podman system renumber || true
+
+    # Require containers started by ./start
+    if ! podman inspect -f '{{{{.State.Running}}}}' "$APP-postgres" 2>/dev/null | grep -q true; then
+      echo "!!! Postgres not running. Run {appdir}/start first."; exit 1
+    fi
+    if ! podman inspect -f '{{{{.State.Running}}}}' "$APP" 2>/dev/null | grep -q true; then
+      echo "!!! Web container not running. Run {appdir}/start first."; exit 1
+    fi
+
+    # Wait for Postgres
+    echo "### [finish_install] Wait for PG ready"
+    for i in $(seq 1 120); do
+      if podman exec "$APP-postgres" sh -lc 'pg_isready -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" >/dev/null 2>&1'; then
+        echo "[pg] ready"; break
+      fi
+      sleep 1
+      [[ $i -eq 120 ]] && {{ echo "!!! postgres not ready, abort"; exit 1; }}
+    done
+
+    echo "### [finish_install] Create PG extensions (hstore, pg_trgm)"
+    podman exec "$APP-postgres" sh -lc \\
+      'psql -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -Atc "CREATE EXTENSION IF NOT EXISTS hstore; CREATE EXTENSION IF NOT EXISTS pg_trgm;"'
+
+    # Fix git “dubious ownership” before running any rake tasks
+    podman exec "$APP" git config --global --add safe.directory /app || true
+
+    echo "### [finish_install] Rails db:migrate"
+    podman exec "$APP" bash -lc 'cd /app && RAILS_ENV=production bundle exec rake db:migrate'
+
+    
+    echo "### [finish_install] Ensure hostname in config/discourse.conf"
     podman exec "$APP" bash -lc '
       set -e
       cd /app
-      rm -f config/initializers/010-wildcard_styles.rb \\
-            config/initializers/zzz-hostname-hotfix.rb \\
-            config/initializers/_hostname_guard.rb || true
-      RAILS_ENV=production bin/rails r "Stylesheet::Manager.cache.clear; Rails.cache.clear"
+      # create config if missing
+      test -f config/discourse.conf || cp config/discourse_defaults.conf config/discourse.conf
+      # set hostname = $DISCOURSE_HOSTNAME (fallback to wildcard.local)
+      H="${{DISCOURSE_HOSTNAME:-wildcard.local}}"
+      if grep -q "^hostname" config/discourse.conf; then
+        sed -i "s/^hostname.*/hostname = ${{H}}/" config/discourse.conf
+      else
+        printf "hostname = %s" "$H" >> config/discourse.conf
+      fi
+      echo "[discourse.conf] hostname set to: $H"
+      # sanity print what Rails sees
+      RAILS_ENV=production bin/rails r "puts \\"GlobalSetting.hostname => #{{GlobalSetting.hostname.inspect}}\\""
     '
-    podman restart "$APP" >/dev/null
-    echo "[debug_off] done"
+    
+    # Discover host port from pod mapping (containerPort 3000)
+    HOST_PORT=$(podman pod inspect "$POD" -f '{{{{range .InfraConfig.PortMappings}}}}{{{{if eq .ContainerPort 3000}}}}{{{{.HostPort}}}}{{{{end}}}}{{{{end}}}}' 2>/dev/null || true)
+    [ -z "$HOST_PORT" ] && HOST_PORT="{port}"
+    HEALTH_URL="http://127.0.0.1:${{HOST_PORT}}/"
+
+    echo "### [finish_install] Health probe"
+    curl -sS -o /dev/null -w "HTTP %{{http_code}}\\n" "$HEALTH_URL" || true
+
+    
+    podman exec -it discourse bash -lc '
+    set -e
+    cd /app
+
+    # 2) Add a safe prepend-based patch
+    cat > config/initializers/010-wildcard_styles.rb << "RUBY"
+    module WildcardStyles
+      # Use existing hostname if present; otherwise fall back to env/localhost-ish
+      def current_hostname
+        base = (defined?(super) ? super() : nil)
+        (base.respond_to?(:presence) ? base.presence : base) ||
+          (ENV["DISCOURSE_HOSTNAME"].to_s.strip.presence rescue nil) ||
+          (ENV["HOSTNAME"].to_s.strip.presence rescue nil) ||
+          "wildcard"
+      end
+
+      # Keep digest stable + avoid nil→String
+      def theme_digest
+        Digest::SHA1.hexdigest(
+          scss_digest.to_s + color_scheme_digest.to_s + settings_digest + uploads_digest + current_hostname.to_s
+        )
+      end
+    end
+
+    Rails.configuration.to_prepare do
+      if defined?(::Stylesheet::Manager::Builder)
+        ::Stylesheet::Manager::Builder.prepend(WildcardStyles)
+      end
+    end
+    RUBY
+
+    # 3) Clear caches so CSS recompiles
+    RAILS_ENV=production bin/rails r "Stylesheet::Manager.cache.clear; Rails.cache.clear"
+    '
+
+    podman restart discourse
+
+
+
+
+    echo
+    echo "✅ Discourse initialized — rock & roll"
+    echo "   URL:      $HEALTH_URL"
+    echo "   Admin:    $ADMIN_USER / $ADMIN_PASS  ($ADMIN_EMAIL)"
+    echo "   (Set DISCOURSE_HOSTNAME in {appdir}/.env for proper links & email.)"
     """)
 
     readme = textwrap.dedent(f"""\
@@ -352,48 +541,68 @@ RUBY
     **Env:**  {appdir}/.env  
     **Logs:** {logdir}/ (discourse.log, unicorn*.log, sidekiq.log)
 
-    ## Usage
-    1) Start (first run performs one-time install, writes `.installed`):
+    ## First Run
+    1. Start services (pulls images & boots containers):
        ```
        {appdir}/start
        ```
+       Start will:
+       - Recreate the pod on **port {port}**,
+       - Start PG/Redis/Web,
+       - Follow live logs and print an **asset counter every 5s**,
+       - Print health probe codes to `http://127.0.0.1:{port}/`.
 
-    2) Stop:
+    2. Initialize the app (migrations, extensions, assets with CSS crash guard):
        ```
-       {appdir}/stop
-       ```
-
-    3) Update (simple restart cycle):
-       ```
-       {appdir}/update
+       {appdir}/finish_install
        ```
 
-    4) Optional debug patch (stylesheet/hostname stable digest):
+    3. Check health:
        ```
-       {appdir}/debug_on   # apply patch + clear caches + restart
-       {appdir}/debug_off  # remove patch + clear caches + restart
+       curl -sS -o /dev/null -w 'HTTP %{{http_code}}\\n' http://127.0.0.1:{port}/
        ```
+
+    ## Commands
+    - Start:       {appdir}/start
+    - Stop:        {appdir}/stop
+    - Update:      {appdir}/update
+    - Health cron: {appdir}/check (restarts if down)
+    - Diagnose:    {appdir}/diagnose
+    - Logs:        {appdir}/logs
+    - DB Ext:      {appdir}/dbext
+    - Migrate:     {appdir}/migrate
+    - Finish init: {appdir}/finish_install
 
     ## Notes
-    - Images override via env: DISCOURSE_IMAGE, REDIS_IMAGE, POSTGRES_IMAGE.
-    - We remove duplicate `data/plugins/automation` to avoid redefinition spam.
-    - Fontconfig cache is `/data/cache` via `XDG_CACHE_HOME` to stop noisy warnings.
-    - Set `DISCOURSE_HOSTNAME` in `{appdir}/.env` for correct links and email.
-    - Health probe example:
-      ```
-      curl -sS -o /dev/null -w 'HTTP %{{http_code}}\\n' http://127.0.0.1:{port}/
-      ```
+    - Images can be swapped via env vars: DISCOURSE_IMAGE, REDIS_IMAGE, POSTGRES_IMAGE.
+    - We remove duplicate `data/plugins/automation` to avoid plugin redefinition spam.
+    - Fontconfig cache is set to `/data/cache` to stop "No writable cache directories".
+    - Set `DISCOURSE_HOSTNAME` in `{appdir}/.env` for proper links and email.
     """)
 
     # write files
-    write(f'{appdir}/start',      start,      0o700)
-    write(f'{appdir}/stop',       stop,       0o700)
-    write(f'{appdir}/update',     update,     0o700)
-    write(f'{appdir}/debug_on',   debug_on,   0o700)
-    write(f'{appdir}/debug_off',  debug_off,  0o700)
-    write(f'{appdir}/README.md',  readme,     0o600)
+    write(f'{appdir}/start',          start,          0o700)
+    write(f'{appdir}/stop',           stop,           0o700)
+    write(f'{appdir}/update',         update,         0o700)
+    write(f'{appdir}/check',          check,          0o700)
+    write(f'{appdir}/logs',           logs_sh,        0o700)
+    write(f'{appdir}/diagnose',       diagnose,       0o700)
+    write(f'{appdir}/dbext',          dbext,          0o700)
+    write(f'{appdir}/migrate',        migrate,        0o700)
+    write(f'{appdir}/finish_install', finish_install, 0o700)
+    write(f'{appdir}/README.md',      readme,         0o600)
 
-    # Panel signals (best-effort)
+    # cron: health every ~10m; daily update during low hours
+    m  = random.randint(0,9)
+    hh = random.randint(2,5)
+    mm = random.randint(0,59)
+    add_cron(f'0{m},1{m},2{m},3{m},4{m},5{m} * * * * {appdir}/check > /dev/null 2>&1')
+    add_cron(f'{mm} {hh} * * * {appdir}/update > /dev/null 2>&1')
+
+    # DO NOT start/pull here (user does that later)
+    time.sleep(10)
+
+    # /app/installed/ (retry once if transient)
     try:
         api.post('/app/installed/', json.dumps([{'id': args.uuid}]))
     except Exception as e:
@@ -404,19 +613,20 @@ RUBY
         except Exception as e2:
             logging.error(f'/app/installed/ failed after retry: {e2}')
 
+    # panel notice (don’t fail installer if this flakes)
     try:
         api.post('/notice/create/', json.dumps([{
             'type':'M',
             'content': (
-                f'Discourse prepared for app {appname}. SSH and run {appdir}/start. '
-                f'First run performs install and writes .installed. '
-                f'Initial admin vars in {appdir}/.env (ADMIN_*).'
+                f'Discourse prepared for app {appname}. SSH and run {appdir}/start, then {appdir}/finish_install. '
+                f'Start is ultra-verbose and shows asset progress and health checks. '
+                f'Initial admin: {admin_user}/{admin_pass} ({admin_email}).'
             )
         }]))
     except Exception as e:
         logging.warning(f'/notice/create/ failed: {e}')
 
-    logging.info('Install complete (scripts written).')
+    logging.info('Install complete (scripts written; no long-running tasks).')
 
 if __name__ == '__main__':
     main()
