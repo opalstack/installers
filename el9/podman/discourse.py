@@ -1,632 +1,417 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-Discourse on Opalstack (EL9 + Podman, rootless) — one-click installer
 
-WHAT THIS DOES:
-- Only writes files, cron, and a panel notice. **No image pulls, no starts**.
-- User later runs: start/stop/update/check/diagnose and **finish_install** (README explains).
+import argparse, http.client, json, logging, os, re, secrets, shlex, string, subprocess, sys, tarfile, textwrap, time, urllib.request, hashlib, shutil
 
-ARCH / WHERE THINGS RUN:
-- Postgres + Redis + Web all run **inside a single Podman pod** bound to the Opalstack app port.
-- Pod is recreated on each start with `-p 127.0.0.1:${PORT}:3000`.
+# ---------------- Opalstack API / env ----------------
+API_URL = (os.environ.get("OPAL_API_URL") or os.environ.get("API_URL") or "https://my.opalstack.com").rstrip("/")
+API_HOST = API_URL.replace("https://", "").replace("http://", "")
+API_BASE_URI = "/api/v1"
 
-KEY FIXES:
-- **Init moved out of start**: migrations, PG extensions, and asset build live in `finish_install`.
-- **CSS crash guard**: clears caches, clobbers, precompiles, verifies real CSS; retries once.
-- **git safe.directory**: `/app` marked safe to avoid “dubious ownership”.
-- **Rootless cgroups**: `CONTAINERS_CGROUP_MANAGER=cgroupfs` + `--cgroups=disabled`.
-- **PG perms**: `podman unshare` to avoid EPERM.
-- **Ultra-verbose start**: timestamps, container logs follow, asset counter every 5s.
-- **Duplicate Automation plugin**: nuked in data dir to avoid redefinition spam.
-- **Fontconfig spam**: `XDG_CACHE_HOME=/data/cache`.
-- **Port certainty**: pod recreated every start with explicit `-p 127.0.0.1:${PORT}:3000`.
+# EL9 SCL toolchains (same posture as Mastodon installer)
+CMD_PREFIX = "/bin/scl enable nodejs20 ruby33 -- "
 
-Change image via env if you want:
-  DISCOURSE_IMAGE, REDIS_IMAGE, POSTGRES_IMAGE
-Default images:
-  Web/Sidekiq: docker.io/tiredofit/discourse:latest
-  Redis:       docker.io/library/redis:7-alpine
-  Postgres:    docker.io/library/postgres:16-alpine
-"""
+# Discourse tag pinning
+DISCOURSE_TAG = os.environ.get("DISCOURSE_TAG", "")  # e.g. v3.4.7 ; if empty, auto-resolve latest vX.Y.Z
+GITHUB_TAGS_API = "https://api.github.com/repos/discourse/discourse/tags?per_page=100"
+SEMVER_RE = re.compile(r"^v\d+\.\d+\.\d+$")
 
-import argparse, sys, os, json, logging, http.client, subprocess, shlex, secrets, string, textwrap, random, time
+# Behavior toggles
+OPAL_SKIP_DB = os.environ.get("OPAL_SKIP_DB", "0") == "1"  # set OPAL_SKIP_DB=1 to use existing DB creds
 
-# ---------- Config ----------
-API_URL = (
-    os.environ.get('OPAL_API_URL')
-    or os.environ.get('API_URL')
-    or 'https://my.opalstack.live'
-).rstrip('/')
-API_HOST = API_URL.replace('https://', '').replace('http://', '')
-API_BASE_URI = '/api/v1'
-
-CMD_ENV = {'PATH': '/usr/local/bin:/usr/bin:/bin', 'UMASK': '0002'}
-
-IMG_WEB   = os.environ.get('DISCOURSE_IMAGE') or 'docker.io/tiredofit/discourse:latest'
-IMG_REDIS = os.environ.get('REDIS_IMAGE')     or 'docker.io/library/redis:7-alpine'
-IMG_PG    = os.environ.get('POSTGRES_IMAGE')  or 'docker.io/library/postgres:16-alpine'  # UID 999
-
-# ---------- API ----------
-class OpalAPI:
-    def __init__(self, host, base_uri, token=None, user=None, password=None):
-        self.host, self.base = host, base_uri
-        if not token:
+# ---------------- API wrapper ------------------------
+class OpalstackAPITool:
+    def __init__(self, host, base_uri, authtoken, user, password):
+        self.host = host
+        self.base_uri = base_uri
+        if not authtoken:
+            payload = json.dumps({"username": user, "password": password})
             conn = http.client.HTTPSConnection(self.host)
-            payload = json.dumps({'username': user, 'password': password})
-            conn.request('POST', f'{self.base}/login/', payload, headers={'Content-type':'application/json'})
+            conn.request("POST", self.base_uri + "/login/", payload, headers={"Content-type": "application/json"})
             resp = conn.getresponse()
-            data = json.loads(resp.read() or b'{}')
-            if not data.get('token'):
-                logging.error(f'Auth failed (HTTP {resp.status}).'); sys.exit(1)
-            token = data['token']
-        self.h = {'Content-type': 'application/json', 'Authorization': f'Token {token}'}
+            result = json.loads(resp.read() or b"{}")
+            token = result.get("token")
+            if not token:
+                logging.error(f"Invalid credentials; HTTP {resp.status}")
+                sys.exit(1)
+            authtoken = token
+        self.headers = {"Content-type": "application/json", "Authorization": f"Token {authtoken}"}
 
-    def get(self, path):
+    def get(self, endpoint):
         conn = http.client.HTTPSConnection(self.host)
-        conn.request('GET', f'{self.base}{path}', headers=self.h)
+        conn.request("GET", self.base_uri + endpoint, headers=self.headers)
         resp = conn.getresponse()
-        data = json.loads(resp.read() or b'{}')
+        data = json.loads(resp.read() or b"{}")
         if resp.status >= 400:
-            logging.error(f'GET {path} -> HTTP {resp.status}'); sys.exit(1)
+            logging.error(f"GET {endpoint} -> HTTP {resp.status}")
+            sys.exit(1)
         return data
 
-    def post(self, path, payload):
+    def post(self, endpoint, payload):
         conn = http.client.HTTPSConnection(self.host)
-        conn.request('POST', f'{self.base}{path}', payload, headers=self.h)
+        conn.request("POST", self.base_uri + endpoint, payload, headers=self.headers)
         resp = conn.getresponse()
-        data = json.loads(resp.read() or b'{}')
+        data = json.loads(resp.read() or b"{}")
         if resp.status >= 400:
-            logging.error(f'POST {path} -> HTTP {resp.status}: {data}')
+            logging.error(f"POST {endpoint} -> HTTP {resp.status}: {data}")
         return data
 
-# ---------- helpers ----------
-def pw(n=24):
+# ---------------- helpers ----------------------------
+def gen_password(n=24):
     chars = string.ascii_letters + string.digits
-    return ''.join(secrets.choice(chars) for _ in range(n))
+    return "".join(secrets.choice(chars) for _ in range(n))
 
-def sh(cmd, cwd=None, env=CMD_ENV, check=True):
-    logging.info(f'$ {cmd}')
+def run_command(cmd, env, cwd=None, use_shlex=True):
+    """Run under SCL Ruby/Node; raise on failure."""
+    full = CMD_PREFIX + cmd
+    logging.info(f"$ {full}")
     try:
-        out = subprocess.check_output(shlex.split(cmd), cwd=cwd, env=env, stderr=subprocess.STDOUT)
-        return out.decode('utf-8', 'ignore')
+        if use_shlex:
+            out = subprocess.check_output(shlex.split(full), cwd=cwd, env=env, stderr=subprocess.STDOUT)
+        else:
+            out = subprocess.check_output(full, cwd=cwd, env=env, stderr=subprocess.STDOUT, shell=True)
+        return out.decode("utf-8", "ignore")
     except subprocess.CalledProcessError as e:
-        logging.error(f'Command failed ({e.returncode}): {cmd}')
-        logging.error(e.output.decode('utf-8', 'ignore'))
-        if check: sys.exit(e.returncode)
-        return e.output.decode('utf-8', 'ignore')
+        logging.error(e.output.decode("utf-8", "ignore"))
+        raise
 
-def write(path, content, mode=0o600):
-    with open(path, 'w') as f: f.write(content)
-    os.chmod(path, mode)
-    logging.info(f'Created file {path} perms={oct(mode)}')
+def create_file(path, contents, perms=0o600):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w") as f:
+        f.write(contents)
+    os.chmod(path, perms)
+    logging.info(f"wrote {path} perms={oct(perms)}")
 
-def add_cron(line):
-    home = os.path.expanduser('~')
-    tmp = f'{home}/.tmp{pw(8)}'
+def add_cronjob(line):
+    """Append a cron job if not already present."""
+    home = os.path.expanduser("~")
+    tmp = f"{home}/.tmp{gen_password(8)}"
     try:
-        existing = subprocess.check_output('crontab -l'.split(), stderr=subprocess.STDOUT).decode()
+        existing = subprocess.check_output("crontab -l".split(), stderr=subprocess.STDOUT).decode()
     except subprocess.CalledProcessError:
-        existing = ''
+        existing = ""
     if line in existing:
-        logging.info(f'Cron already present: {line}')
+        logging.info("cron already present")
         return
-    with open(tmp, 'w') as t:
+    with open(tmp, "w") as t:
         t.write(existing)
-        if existing and not existing.endswith('\n'):
-            t.write('\n')
-        t.write(line + '\n')
-    sh(f'crontab {tmp}')
+        if existing and not existing.endswith("\n"):
+            t.write("\n")
+        t.write(line + "\n")
+    subprocess.check_call(shlex.split(f"crontab {tmp}"))
     os.remove(tmp)
-    logging.info(f'Added cron: {line}')
+    logging.info(f"added cron: {line}")
 
-# ---------- main ----------
+def latest_stable_tag():
+    with urllib.request.urlopen(GITHUB_TAGS_API, timeout=30) as r:
+        data = json.loads(r.read().decode("utf-8"))
+    for t in data:
+        name = t.get("name", "")
+        if SEMVER_RE.match(name):
+            return name
+    raise RuntimeError("No stable SemVer tag found in GitHub tags")
+
+def download_and_extract_tag(tag, dest_dir):
+    os.makedirs(dest_dir, exist_ok=True)
+    url = f"https://github.com/discourse/discourse/archive/refs/tags/{tag}.tar.gz"
+    tarpath = os.path.join(dest_dir, f"discourse-{tag}.tar.gz")
+    with urllib.request.urlopen(url, timeout=60) as r, open(tarpath, "wb") as f:
+        shutil.copyfileobj(r, f)
+    sha256 = hashlib.sha256()
+    with open(tarpath, "rb") as f:
+        for chunk in iter(lambda: f.read(65536), b""):
+            sha256.update(chunk)
+    logging.info(f"fetched {tag} sha256={sha256.hexdigest()}")
+    with tarfile.open(tarpath, "r:gz") as tf:
+        top = tf.getmembers()[0].name.split("/")[0]  # e.g. discourse-3.4.7
+        tf.extractall(dest_dir)
+    src = os.path.join(dest_dir, top)
+    dst = os.path.join(dest_dir, "discourse")
+    if os.path.exists(dst):
+        shutil.rmtree(dst)
+    os.rename(src, dst)
+    os.remove(tarpath)
+
+# ---------------- main -------------------------------
 def main():
-    ap = argparse.ArgumentParser(description='Install Discourse (Podman) on Opalstack')
-    ap.add_argument('-i', dest='uuid',       default=os.environ.get('UUID'))
-    ap.add_argument('-n', dest='name',       default=os.environ.get('APPNAME'))
-    ap.add_argument('-t', dest='token',      default=os.environ.get('OPAL_TOKEN'))
-    ap.add_argument('-u', dest='user',       default=os.environ.get('OPAL_USER'))
-    ap.add_argument('-p', dest='password',   default=os.environ.get('OPAL_PASS'))
-    args = ap.parse_args()
+    parser = argparse.ArgumentParser(description="Install Discourse from source (no Docker) on Opalstack")
+    parser.add_argument("-i", dest="uuid", default=os.environ.get("UUID"))
+    parser.add_argument("-t", dest="token", default=os.environ.get("OPAL_TOKEN"))
+    parser.add_argument("-u", dest="user", default=os.environ.get("OPAL_USER"))
+    parser.add_argument("-p", dest="password", default=os.environ.get("OPAL_PASS"))
+    args = parser.parse_args()
 
-    logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(levelname)s: %(message)s')
+    logging.basicConfig(level=logging.INFO, format="[%(asctime)s] %(levelname)s: %(message)s")
     if not args.uuid:
-        logging.error('Missing app UUID (-i)'); sys.exit(1)
+        logging.error("Missing app UUID (-i)")
+        sys.exit(1)
 
-    api = OpalAPI(API_HOST, API_BASE_URI, args.token, args.user, args.password)
-    app = api.get(f'/app/read/{args.uuid}')
-    if not app.get('name'):
-        logging.error('App not found.'); sys.exit(1)
+    api = OpalstackAPITool(API_HOST, API_BASE_URI, args.token, args.user, args.password)
+    app = api.get(f"/app/read/{args.uuid}")
+    if not app.get("name"):
+        logging.error("App not found")
+        sys.exit(1)
 
-    appname = app['name']
-    osuser  = app['osuser_name']
-    port    = int(app['port'])
-    appdir  = f'/home/{osuser}/apps/{appname}'
-    logdir  = f'/home/{osuser}/logs/apps/{appname}'
+    appname = app["name"]; osuser = app["osuser_name"]; port = int(app["port"])
+    appdir = f'/home/{osuser}/apps/{appname}'
+    logdir = f'/home/{osuser}/logs/apps/{appname}'
+    srcdir = f"{appdir}/discourse"
+    pids   = f"{appdir}/tmp/pids"
 
-    logging.info(f'Preparing Discourse for app "{appname}" (port {port})')
+    os.makedirs(appdir, exist_ok=True)
+    os.makedirs(logdir, exist_ok=True)
+    os.makedirs(pids, exist_ok=True)
+    os.makedirs(f"{appdir}/tmp", exist_ok=True)
 
-    # dirs
-    sh(f'mkdir -p {appdir}/data')
-    sh(f'mkdir -p {appdir}/pgdata')
-    sh(f'mkdir -p {logdir}')
+    # -------- DB user + DB via Opalstack API (unless skipped) --------
+    if OPAL_SKIP_DB:
+        db_name = os.environ.get("DB_NAME") or f"disc_{args.uuid[:8]}".lower()
+        db_user = os.environ.get("DB_USER") or db_name
+        db_pass = os.environ.get("DB_PASS") or gen_password()
+        logging.info("OPAL_SKIP_DB=1 -> using provided/existing DB creds")
+    else:
+        db_name = f"{appname[:8]}_{args.uuid[:8]}".lower()
+        db_user = db_name
+        db_pass = gen_password()
+        payload_user = json.dumps([{"server": app["server"], "name": db_user, "password": db_pass, "external": "false"}])
+        api.post("/psqluser/create/", payload_user)
+        time.sleep(3)
+        users = api.get("/psqluser/list/")
+        uid = None
+        for u in users:
+            if u.get("name") == db_user:
+                uid = u["id"]; break
+        if not uid:
+            logging.error("Failed to create/find DB user")
+            sys.exit(1)
+        payload_db = json.dumps([{"server": app["server"], "name": db_name, "dbusers_readwrite": [uid]}])
+        api.post("/psqldb/create/", payload_db)
+        time.sleep(3)
+        api.post("/psqluser/update/", json.dumps([{"id": [uid], "password": db_pass, "external": "false"}]))
+        logging.info(f"DB ready: user={db_user} db={db_name}")
 
-    # ---- creds/env (self-contained DB) ----
-    db_user = f"disc_{args.uuid[:8]}".lower()
-    db_name = db_user
-    db_pass = pw(24)
-    admin_user  = 'admin'
-    admin_email = f'{admin_user}@example.com'
-    admin_pass  = pw(16)
+    # -------- fetch Discourse tagged source --------
+    tag = DISCOURSE_TAG or latest_stable_tag()
+    logging.info(f"Using Discourse tag: {tag}")
+    download_and_extract_tag(tag, appdir)
 
-    env = textwrap.dedent(f"""\
-    # ==== Discourse env ====
-    # Postgres (container in pod)
-    DB_HOST=127.0.0.1
-    DB_PORT=5432
-    DB_NAME={db_name}
-    DB_USER={db_user}
-    DB_PASS={db_pass}
+    # -------- build env (Ruby+Node via SCL) --------
+    CMD_ENV = {
+        "RAILS_ENV": "production",
+        "PATH": f'{appdir}/node/bin:{srcdir}/bin:/usr/local/bin:/usr/bin:/bin',
+        "GEM_HOME": f"{srcdir}/.gems",
+        "BUNDLE_PATH": f"{srcdir}/vendor/bundle",
+        "BUNDLE_DEPLOYMENT": "1",
+        "UMASK": "0002",
+        "HOME": f"/home/{osuser}",
+        "TMPDIR": f"{appdir}/tmp",
+    }
 
-    # Redis (container in pod)
-    REDIS_HOST=127.0.0.1
-    REDIS_PORT=6379
+    # Corepack + Yarn classic
+    run_command("corepack enable", CMD_ENV)
+    run_command("corepack prepare yarn@1.22.19 --activate", CMD_ENV)
 
-    # Admin bootstrap (change if desired)
-    ADMIN_USER={admin_user}
-    ADMIN_EMAIL={admin_email}
-    ADMIN_PASS={admin_pass}
+    # Bundle / Yarn
+    run_command("bundle config set without 'development test'", CMD_ENV, cwd=srcdir)
+    run_command("bundle install --jobs 4", CMD_ENV, cwd=srcdir)
+    run_command("yarn install --frozen-lockfile --network-timeout 600000", CMD_ENV, cwd=srcdir)
 
-    # Logging
-    LOG_PATH=/data/logs
-    LOG_LEVEL=info
+    # -------- write config/discourse.conf --------
+    secret_hex = secrets.token_hex(64)  # 128 hex chars
+    hostname_placeholder = "forum.example.com"
 
-    # Optional: set your site hostname (recommended)
-    DISCOURSE_HOSTNAME=wildcard.local
+    # per-forum Redis via UNIX socket per Opalstack forum guidance
+    redis_sock = f"{srcdir}/tmp/sockets/redis.sock"
+
+    discourse_conf = textwrap.dedent(f"""\
+    # Discourse production config
+    hostname = "{hostname_placeholder}"
+
+    # Postgres
+    db_host = localhost
+    db_port = 5432
+    db_name = {db_name}
+    db_username = {db_user}
+    db_password = {db_pass}
+
+    # Redis (UNIX socket)
+    redis_url = unix://{redis_sock}
+
+    # Required secret
+    secret_key_base = {secret_hex}
+
+    # Discourse serves assets via Rails; Opalstack Nginx fronts this port.
+    serve_static_assets = true
     """)
-    write(f'{appdir}/.env', env, 0o600)
+    create_file(f"{srcdir}/config/discourse.conf", discourse_conf, perms=0o600)
 
-    # ---- scripts ----
+    # -------- create redis.conf matching forum instructions --------
+    # port 0 + unixsocket + perms + daemonize yes + pidfile/logfile
+    redis_conf = textwrap.dedent(f"""\
+    port 0
+    unixsocket {redis_sock}
+    unixsocketperm 700
+    daemonize yes
+    pidfile {srcdir}/tmp/pids/redis.pid
+    logfile {logdir}/redis.log
+    save ""
+    appendonly no
+    """)
+    create_file(f"{appdir}/redis.conf", redis_conf, perms=0o600)
+
+    # -------- database & assets --------
+    run_command("bundle exec rake db:migrate", CMD_ENV, cwd=srcdir)
+    run_command("bundle exec rake assets:precompile", CMD_ENV, cwd=srcdir)
+
+    # -------- scripts (Redis via SCL rh-redis5, Puma, Sidekiq) --------
+    setenv = textwrap.dedent(f"""\
+    #!/bin/bash
+    # Load Ruby/Node toolchains for Discourse
+    APPDIR="{appdir}"
+    SRCDIR="{srcdir}"
+    export RAILS_ENV=production
+    export GEM_HOME="$SRCDIR/.gems"
+    export BUNDLE_PATH="$SRCDIR/vendor/bundle"
+    export PATH="$APPDIR/node/bin:$SRCDIR/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
+    export TMPDIR="$APPDIR/tmp"
+    source scl_source enable nodejs20 ruby33
+    """)
+
     start = textwrap.dedent(f"""\
     #!/bin/bash
-    # Start/attach only. **No init here** — run finish_install after first start.
+    # Start Redis (unix socket via SCL rh-redis5), Puma on app port, Sidekiq.
     set -Eeuo pipefail
-    export CONTAINERS_CGROUP_MANAGER=cgroupfs
-    export TIMEFORMAT='[time] %3lR'
-    export PS4='+ $(date "+%Y-%m-%d %H:%M:%S") [${{BASH_SOURCE##*/}}:${{LINENO}}] '
-    set -x
-
-    APP="{appname}"
-    POD="$APP-pod"
+    APPNAME="{appname}"
     APPDIR="{appdir}"
+    SRCDIR="{srcdir}"
     LOGDIR="{logdir}"
+    PIDS="{pids}"
     PORT="{port}"
-    IMG_WEB="{IMG_WEB}"
-    IMG_REDIS="{IMG_REDIS}"
-    IMG_PG="{IMG_PG}"
-    HEALTH_URL="http://127.0.0.1:${{PORT}}/"
+    export RAILS_ENV=production
 
-    echo "### [start] Using images:"
-    echo "    WEB:   $IMG_WEB"
-    echo "    REDIS: $IMG_REDIS"
-    echo "    PG:    $IMG_PG"
-    echo "### [start] App port (from API): $PORT"
+    mkdir -p "$SRCDIR/tmp/pids" "$SRCDIR/tmp/sockets" "$LOGDIR"
 
-    # Lock issues sometimes happen on multi-tenant hosts
-    podman system renumber || true
+    # env
+    source "$APPDIR/setenv"
 
-    echo "### [start] Recreate pod to lock correct port"
-    podman pod rm -f "$POD" || true
-    if ss -ltn '( sport = :'$PORT' )' | grep -q LISTEN; then
-      echo "!!! Port $PORT is already in use on host:"
-      ss -ltnp '( sport = :'$PORT' )' || true
-      exit 1
-    fi
-    podman --log-level=debug pod create --name "$POD" -p 127.0.0.1:${{PORT}}:3000
-
-    echo "### [start] Ensure dirs + perms"
-    mkdir -p "$LOGDIR" "$APPDIR/pgdata" "$APPDIR/data" "$APPDIR/data/logs" "$APPDIR/data/plugins" "$APPDIR/data/cache"
-    chmod 0777 "$LOGDIR" || true
-    # avoid duplicate Automation plugin (image already includes it)
-    rm -rf "$APPDIR/data/plugins/automation" || true
-    # postgres perms inside userns
-    podman unshare chown -R 999:999 "$APPDIR/pgdata" || true
-    podman unshare chmod -R 0770 "$APPDIR/pgdata" || true
-
-    echo "### [start] Export env"
-    set -a; source "$APPDIR/.env"; set +a
-
-    echo "### [start] Start Postgres"
-    podman rm -f "$APP-postgres" || true
-    podman --log-level=debug run --cgroups=disabled -d --name "$APP-postgres" --pod "$POD" \\
-      -e POSTGRES_USER="$DB_USER" \\
-      -e POSTGRES_PASSWORD="$DB_PASS" \\
-      -e POSTGRES_DB="$DB_NAME" \\
-      -v "$APPDIR/pgdata:/var/lib/postgresql/data" \\
-      "$IMG_PG"
-
-    echo "### [start] Wait for PG ready"
-    for i in $(seq 1 120); do
-      if podman exec "$APP-postgres" sh -lc 'pg_isready -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" >/dev/null 2>&1'; then
-        echo "[pg] ready"
-        break
-      fi
+    # ---- Redis (per Opalstack forum: use socket, no TCP port) ----
+    # https://community.opalstack.com/d/975-redis-instance-for-django-app-wcelery
+    if [ -f "$SRCDIR/tmp/pids/redis.pid" ] && kill -0 $(cat "$SRCDIR/tmp/pids/redis.pid") 2>/dev/null; then
+      echo "==> redis already running"
+    else
+      echo "==> starting redis via SCL rh-redis5"
+      /bin/scl enable rh-redis5 -- redis-server "$APPDIR/redis.conf"
       sleep 1
-      if [[ $i -eq 120 ]]; then
-        echo "!!! postgres not ready, abort"
-        exit 1
-      fi
-    done
+    fi
 
-    echo "### [start] Start Redis"
-    podman rm -f "$APP-redis" || true
-    podman --log-level=debug run --cgroups=disabled -d --name "$APP-redis" --pod "$POD" "$IMG_REDIS"
+    # Puma (bind to Opalstack app port)
+    if [ -f "$SRCDIR/tmp/pids/puma.pid" ] && kill -0 $(cat "$SRCDIR/tmp/pids/puma.pid") 2>/dev/null; then
+      echo "==> puma already running"
+    else
+      echo "==> starting puma on 127.0.0.1:$PORT"
+      cd "$SRCDIR"
+      bundle exec puma -e production -b tcp://127.0.0.1:$PORT -d --pidfile "$SRCDIR/tmp/pids/puma.pid" --redirect-stdout "$LOGDIR/puma.stdout.log" --redirect-stderr "$LOGDIR/puma.stderr.log"
+      sleep 1
+    fi
 
-    echo "### [start] Launch Discourse (web+sidekiq)"
-    podman rm -f "$APP" || true
-    podman --log-level=debug run --cgroups=disabled -d --name "$APP" --pod "$POD" \\
-      -v "$APPDIR/data:/data" \\
-      -v "$LOGDIR:/data/logs" \\
-      --env-file "$APPDIR/.env" \\
-      -e XDG_CACHE_HOME=/data/cache \\
-      --label io.containers.autoupdate=registry \\
-      "$IMG_WEB"
+    # Sidekiq
+    if [ -f "$SRCDIR/tmp/pids/sidekiq.pid" ] && kill -0 $(cat "$SRCDIR/tmp/pids/sidekiq.pid") 2>/dev/null; then
+      echo "==> sidekiq already running"
+    else
+      echo "==> starting sidekiq"
+      cd "$SRCDIR"
+      bundle exec sidekiq -e production -d -L "$LOGDIR/sidekiq.log" -P "$SRCDIR/tmp/pids/sidekiq.pid"
+    fi
 
-    echo "### [start] Containers:"
-    podman ps --format "table {{{{.Names}}}}\\t{{{{.Status}}}}\\t{{{{.Image}}}}\\t{{{{.Ports}}}}"
-
-    echo "### [start] LIVE LOG + ASSET PROGRESS (Ctrl-C to stop following; app keeps running)"
-    (
-      set +x
-      podman logs -f "$APP" &
-      LOGPID=$!
-      trap "kill -9 $LOGPID >/dev/null 2>&1 || true" INT TERM EXIT
-      for i in $(seq 1 300); do
-        files=$(podman exec "$APP" bash -lc 'ls -1 /app/public/assets 2>/dev/null | wc -l' 2>/dev/null || echo 0)
-        size=$(podman exec "$APP" bash -lc 'du -sh /app/public/assets 2>/dev/null | cut -f1' 2>/dev/null || echo 0)
-        echo "[assets] files=$files size=$size"
-        code=$(curl -sS -o /dev/null -w "HTTP %{{http_code}}" "$HEALTH_URL" || true)
-        echo "[health] $HEALTH_URL -> $code"
-        sleep 5
-      done
-      kill -9 $LOGPID >/dev/null 2>&1 || true
-      trap - INT TERM EXIT
-    )
-
-    echo "### [start] Done. If first boot, run: {appdir}/finish_install"
-    echo "### [start] Health probe: curl -sS -o /dev/null -w 'HTTP %{{http_code}}\\n' $HEALTH_URL"
+    echo "OK"
     """)
 
     stop = textwrap.dedent(f"""\
     #!/bin/bash
+    # Stop Puma, Sidekiq, and local Redis
     set -Eeuo pipefail
-    export CONTAINERS_CGROUP_MANAGER=cgroupfs
-    set -x
-    APP="{appname}"
-    POD="$APP-pod"
-    podman rm -f "$APP" "$APP-redis" "$APP-postgres" || true
-    podman pod rm -f "$POD" || true
-    echo "[stop] stopped {appname}"
-    """)
+    SRCDIR="{srcdir}"
 
-    update = textwrap.dedent(f"""\
-    #!/bin/bash
-    set -Eeuo pipefail
-    export CONTAINERS_CGROUP_MANAGER=cgroupfs
-    set -x
-    "{appdir}/stop" || true
-    "{appdir}/start"
-    """)
-
-    check = textwrap.dedent(f"""\
-    #!/bin/bash
-    set -Eeuo pipefail
-    export CONTAINERS_CGROUP_MANAGER=cgroupfs
-    set -x
-    APP="{appname}"
-    need=0
-    for c in "$APP-postgres" "$APP-redis" "$APP"; do
-      state=$(podman inspect -f '{{{{.State.Running}}}}' "$c" 2>/dev/null || echo "false")
-      [[ "$state" != "true" ]] && need=1
-    done
-    if [[ "$need" -eq 1 ]]; then
-      echo "[check] one or more containers down; restarting..."
-      "{appdir}/start"
-    else
-      echo "[check] all good"
-    fi
-    """)
-
-    logs_sh = textwrap.dedent(f"""\
-    #!/bin/bash
-    set -Eeuo pipefail
-    export CONTAINERS_CGROUP_MANAGER=cgroupfs
-    set -x
-    tail -F "{logdir}/discourse.log" "{logdir}/unicorn.log" "{logdir}/unicorn-error.log" "{logdir}/sidekiq.log" 2>/dev/null
-    """)
-
-    diagnose = textwrap.dedent(f"""\
-    #!/bin/bash
-    set -Eeuo pipefail
-    export CONTAINERS_CGROUP_MANAGER=cgroupfs
-    set -x
-    APP="{appname}"
-    PORT="{port}"
-    LOGDIR="{logdir}"
-
-    echo "=== POD ==="
-    podman pod ps
-
-    echo "=== CONTAINERS ==="
-    podman ps --format "table {{{{.Names}}}}\\t{{{{.Status}}}}\\t{{{{.Image}}}}\\t{{{{.Ports}}}}"
-
-    echo -e "\\n=== HOST PORT CHECK ==="
-    curl -sS -o /dev/null -w "HTTP %{{http_code}}\\n" "http://127.0.0.1:${{PORT}}/" || true
-
-    echo -e "\\n=== REDIS PING ==="
-    podman exec "$APP-redis" sh -lc 'redis-cli -h 127.0.0.1 -p 6379 ping' || echo "redis ping failed"
-
-    echo -e "\\n=== PG READY? ==="
-    podman exec "$APP-postgres" sh -lc 'pg_isready -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
-
-    echo -e "\\n=== LAST LOGS ==="
-    ls -lh "$LOGDIR" | sed 's/^/    /'
-    for f in "$LOGDIR"/discourse.log "$LOGDIR"/unicorn*.log "$LOGDIR"/sidekiq.log; do
-      echo "--- $f"
-      tail -n 200 "$f" 2>/dev/null || true
-      echo
-    done
-    """)
-
-    dbext = textwrap.dedent(f"""\
-    #!/bin/bash
-    set -Eeuo pipefail
-    export CONTAINERS_CGROUP_MANAGER=cgroupfs
-    set -x
-    APP="{appname}"
-    echo "[dbext] creating hstore/pg_trgm..."
-    for i in $(seq 1 120); do
-      if podman exec "$APP-postgres" sh -lc 'pg_isready -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" >/dev/null 2>&1'; then
-        podman exec "$APP-postgres" sh -lc 'psql -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -Atc "CREATE EXTENSION IF NOT EXISTS hstore; CREATE EXTENSION IF NOT EXISTS pg_trgm;"'
-        echo "[dbext] done."
-        exit 0
-      fi
-      sleep 1
-    done
-    echo "[dbext] postgres not ready"; exit 1
-    """)
-
-    migrate = textwrap.dedent(f"""\
-    #!/bin/bash
-    set -Eeuo pipefail
-    export CONTAINERS_CGROUP_MANAGER=cgroupfs
-    set -x
-    APP="{appname}"
-    echo "[migrate] running rails db:migrate (inside container)..."
-    podman exec "$APP" bash -lc 'cd /app && RAILS_ENV=production bundle exec rake db:migrate' || true
-    echo "[migrate] complete."
-    """)
-
-    finish_install = textwrap.dedent(f"""\
-    #!/bin/bash
-    # First-run init: PG ready → extensions → db:migrate → assets (CSS crash guard) → success banner.
-    set -Eeuo pipefail
-    export CONTAINERS_CGROUP_MANAGER=cgroupfs
-    export PS4='+ $(date "+%Y-%m-%d %H:%M:%S") [${{BASH_SOURCE##*/}}:${{LINENO}}] '
-    set -x
-
-    APP="{appname}"
-    POD="$APP-pod"
-    APPDIR="{appdir}"
-
-    # Load env
-    set -a; source "$APPDIR/.env"; set +a
-
-    # Clean duplicate Automation plugin in data dir (image already ships it)
-    rm -rf "$APPDIR/data/plugins/automation" || true
-
-    # Podman lock index sometimes needs a nudge on shared hosts
-    podman system renumber || true
-
-    # Require containers started by ./start
-    if ! podman inspect -f '{{{{.State.Running}}}}' "$APP-postgres" 2>/dev/null | grep -q true; then
-      echo "!!! Postgres not running. Run {appdir}/start first."; exit 1
-    fi
-    if ! podman inspect -f '{{{{.State.Running}}}}' "$APP" 2>/dev/null | grep -q true; then
-      echo "!!! Web container not running. Run {appdir}/start first."; exit 1
+    # Puma
+    if [ -f "$SRCDIR/tmp/pids/puma.pid" ]; then
+      kill $(cat "$SRCDIR/tmp/pids/puma.pid") || true
+      rm -f "$SRCDIR/tmp/pids/puma.pid"
     fi
 
-    # Wait for Postgres
-    echo "### [finish_install] Wait for PG ready"
-    for i in $(seq 1 120); do
-      if podman exec "$APP-postgres" sh -lc 'pg_isready -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" >/dev/null 2>&1'; then
-        echo "[pg] ready"; break
-      fi
-      sleep 1
-      [[ $i -eq 120 ]] && {{ echo "!!! postgres not ready, abort"; exit 1; }}
-    done
+    # Sidekiq
+    if [ -f "$SRCDIR/tmp/pids/sidekiq.pid" ]; then
+      kill $(cat "$SRCDIR/tmp/pids/sidekiq.pid") || true
+      rm -f "$SRCDIR/tmp/pids/sidekiq.pid"
+    fi
 
-    echo "### [finish_install] Create PG extensions (hstore, pg_trgm)"
-    podman exec "$APP-postgres" sh -lc \\
-      'psql -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -Atc "CREATE EXTENSION IF NOT EXISTS hstore; CREATE EXTENSION IF NOT EXISTS pg_trgm;"'
+    # Redis (prefer graceful shutdown via socket)
+    if [ -f "$SRCDIR/tmp/pids/redis.pid" ]; then
+      /bin/scl enable rh-redis5 -- redis-cli -s "$SRCDIR/tmp/sockets/redis.sock" shutdown || kill $(cat "$SRCDIR/tmp/pids/redis.pid") || true
+      rm -f "$SRCDIR/tmp/pids/redis.pid"
+    fi
 
-    # Fix git “dubious ownership” before running any rake tasks
-    podman exec "$APP" git config --global --add safe.directory /app || true
+    echo "stopped"
+    """)
 
-    echo "### [finish_install] Rails db:migrate"
-    podman exec "$APP" bash -lc 'cd /app && RAILS_ENV=production bundle exec rake db:migrate'
-
-    
-    echo "### [finish_install] Ensure hostname in config/discourse.conf"
-    podman exec "$APP" bash -lc '
-      set -e
-      cd /app
-      # create config if missing
-      test -f config/discourse.conf || cp config/discourse_defaults.conf config/discourse.conf
-      # set hostname = $DISCOURSE_HOSTNAME (fallback to wildcard.local)
-      H="${{DISCOURSE_HOSTNAME:-wildcard.local}}"
-      if grep -q "^hostname" config/discourse.conf; then
-        sed -i "s/^hostname.*/hostname = ${{H}}/" config/discourse.conf
-      else
-        printf "hostname = %s" "$H" >> config/discourse.conf
-      fi
-      echo "[discourse.conf] hostname set to: $H"
-      # sanity print what Rails sees
-      RAILS_ENV=production bin/rails r "puts \\"GlobalSetting.hostname => #{{GlobalSetting.hostname.inspect}}\\""
-    '
-    
-    # Discover host port from pod mapping (containerPort 3000)
-    HOST_PORT=$(podman pod inspect "$POD" -f '{{{{range .InfraConfig.PortMappings}}}}{{{{if eq .ContainerPort 3000}}}}{{{{.HostPort}}}}{{{{end}}}}{{{{end}}}}' 2>/dev/null || true)
-    [ -z "$HOST_PORT" ] && HOST_PORT="{port}"
-    HEALTH_URL="http://127.0.0.1:${{HOST_PORT}}/"
-
-    echo "### [finish_install] Health probe"
-    curl -sS -o /dev/null -w "HTTP %{{http_code}}\\n" "$HEALTH_URL" || true
-
-    
-    podman exec -it discourse bash -lc '
-    set -e
-    cd /app
-
-    # 2) Add a safe prepend-based patch
-    cat > config/initializers/010-wildcard_styles.rb << "RUBY"
-    module WildcardStyles
-      # Use existing hostname if present; otherwise fall back to env/localhost-ish
-      def current_hostname
-        base = (defined?(super) ? super() : nil)
-        (base.respond_to?(:presence) ? base.presence : base) ||
-          (ENV["DISCOURSE_HOSTNAME"].to_s.strip.presence rescue nil) ||
-          (ENV["HOSTNAME"].to_s.strip.presence rescue nil) ||
-          "wildcard"
-      end
-
-      # Keep digest stable + avoid nil→String
-      def theme_digest
-        Digest::SHA1.hexdigest(
-          scss_digest.to_s + color_scheme_digest.to_s + settings_digest + uploads_digest + current_hostname.to_s
-        )
-      end
-    end
-
-    Rails.configuration.to_prepare do
-      if defined?(::Stylesheet::Manager::Builder)
-        ::Stylesheet::Manager::Builder.prepend(WildcardStyles)
-      end
-    end
-    RUBY
-
-    # 3) Clear caches so CSS recompiles
-    RAILS_ENV=production bin/rails r "Stylesheet::Manager.cache.clear; Rails.cache.clear"
-    '
-
-    podman restart discourse
-
-
-
-
-    echo
-    echo "✅ Discourse initialized — rock & roll"
-    echo "   URL:      $HEALTH_URL"
-    echo "   Admin:    $ADMIN_USER / $ADMIN_PASS  ($ADMIN_EMAIL)"
-    echo "   (Set DISCOURSE_HOSTNAME in {appdir}/.env for proper links & email.)"
+    restart = textwrap.dedent(f"""\
+    #!/bin/bash
+    {appdir}/stop || true
+    sleep 2
+    {appdir}/start
     """)
 
     readme = textwrap.dedent(f"""\
-    # Discourse (Podman) on Opalstack
+    # Discourse on Opalstack (no Docker)
 
-    **App:** {appname}  
-    **Port:** {port} (host) → 3000 (container)  
-    **Data:** {appdir}/data (Discourse) · {appdir}/pgdata (Postgres)  
-    **Env:**  {appdir}/.env  
-    **Logs:** {logdir}/ (discourse.log, unicorn*.log, sidekiq.log)
+    - Front nginx is Opalstack's; this app binds **Puma** to 127.0.0.1:{port}.
+    - **Sidekiq** handles jobs.
+    - **Redis** runs locally as a **UNIX socket** at: `{srcdir}/tmp/sockets/redis.sock`
+      (started with `scl enable rh-redis5 -- redis-server {appdir}/redis.conf`) per the Opalstack forum guidance. 
+      Change to TCP only if you intentionally create a proxy port app.  :contentReference[oaicite:1]{{index=1}}
 
-    ## First Run
-    1. Start services (pulls images & boots containers):
-       ```
-       {appdir}/start
-       ```
-       Start will:
-       - Recreate the pod on **port {port}**,
-       - Start PG/Redis/Web,
-       - Follow live logs and print an **asset counter every 5s**,
-       - Print health probe codes to `http://127.0.0.1:{port}/`.
+    ## Start/Stop
+    {appdir}/start  
+    {appdir}/stop  
+    {appdir}/restart
 
-    2. Initialize the app (migrations, extensions, assets with CSS crash guard):
-       ```
-       {appdir}/finish_install
-       ```
+    ## First admin
+    cd {srcdir}
+    {appdir}/setenv
+    bundle exec rake admin:create
 
-    3. Check health:
-       ```
-       curl -sS -o /dev/null -w 'HTTP %{{http_code}}\\n' http://127.0.0.1:{port}/
-       ```
+    ## Config
+    - Edit `{srcdir}/config/discourse.conf`: set `hostname = "your.domain"`
+    - DB created: name/user `{db_name}` (password is in this file); or set OPAL_SKIP_DB=1 and provide your own.
 
-    ## Commands
-    - Start:       {appdir}/start
-    - Stop:        {appdir}/stop
-    - Update:      {appdir}/update
-    - Health cron: {appdir}/check (restarts if down)
-    - Diagnose:    {appdir}/diagnose
-    - Logs:        {appdir}/logs
-    - DB Ext:      {appdir}/dbext
-    - Migrate:     {appdir}/migrate
-    - Finish init: {appdir}/finish_install
-
-    ## Notes
-    - Images can be swapped via env vars: DISCOURSE_IMAGE, REDIS_IMAGE, POSTGRES_IMAGE.
-    - We remove duplicate `data/plugins/automation` to avoid plugin redefinition spam.
-    - Fontconfig cache is set to `/data/cache` to stop "No writable cache directories".
-    - Set `DISCOURSE_HOSTNAME` in `{appdir}/.env` for proper links and email.
+    ## Logs
+    - Puma:    /home/{osuser}/logs/apps/{appname}/puma.*.log
+    - Sidekiq: /home/{osuser}/logs/apps/{appname}/sidekiq.log
+    - Redis:   /home/{osuser}/logs/apps/{appname}/redis.log
     """)
 
     # write files
-    write(f'{appdir}/start',          start,          0o700)
-    write(f'{appdir}/stop',           stop,           0o700)
-    write(f'{appdir}/update',         update,         0o700)
-    write(f'{appdir}/check',          check,          0o700)
-    write(f'{appdir}/logs',           logs_sh,        0o700)
-    write(f'{appdir}/diagnose',       diagnose,       0o700)
-    write(f'{appdir}/dbext',          dbext,          0o700)
-    write(f'{appdir}/migrate',        migrate,        0o700)
-    write(f'{appdir}/finish_install', finish_install, 0o700)
-    write(f'{appdir}/README.md',      readme,         0o600)
+    create_file(f"{appdir}/setenv",   setenv,  perms=0o700)
+    create_file(f"{appdir}/start",    start,   perms=0o700)
+    create_file(f"{appdir}/stop",     stop,    perms=0o700)
+    create_file(f"{appdir}/restart",  restart, perms=0o700)
+    create_file(f"{appdir}/README",   readme,  perms=0o644)
 
-    # cron: health every ~10m; daily update during low hours
-    m  = random.randint(0,9)
-    hh = random.randint(2,5)
-    mm = random.randint(0,59)
-    add_cron(f'0{m},1{m},2{m},3{m},4{m},5{m} * * * * {appdir}/check > /dev/null 2>&1')
-    add_cron(f'{mm} {hh} * * * {appdir}/update > /dev/null 2>&1')
+    # cron keepalive (every 10m staggered)
+    m = int(time.time()) % 10
+    add_cronjob(f"{m} */1 * * * {appdir}/start > /dev/null 2>&1")
 
-    # DO NOT start/pull here (user does that later)
-    time.sleep(10)
-
-    # /app/installed/ (retry once if transient)
+    # notify panel
     try:
-        api.post('/app/installed/', json.dumps([{'id': args.uuid}]))
+        api.post("/app/installed/", json.dumps([{"id": args.uuid}]))
     except Exception as e:
-        logging.warning(f'/app/installed/ failed once: {e}; retrying in 3s')
-        time.sleep(3)
-        try:
-            api.post('/app/installed/', json.dumps([{'id': args.uuid}]))
-        except Exception as e2:
-            logging.error(f'/app/installed/ failed after retry: {e2}')
-
-    # panel notice (don’t fail installer if this flakes)
+        logging.warning(f"/app/installed/ failed: {e}")
     try:
-        api.post('/notice/create/', json.dumps([{
-            'type':'M',
-            'content': (
-                f'Discourse prepared for app {appname}. SSH and run {appdir}/start, then {appdir}/finish_install. '
-                f'Start is ultra-verbose and shows asset progress and health checks. '
-                f'Initial admin: {admin_user}/{admin_pass} ({admin_email}).'
-            )
-        }]))
+        msg = f"Discourse prepared for app {appname}. Edit {srcdir}/config/discourse.conf (hostname), then run {appdir}/start."
+        api.post("/notice/create/", json.dumps([{"type":"M","content": msg}]))
     except Exception as e:
-        logging.warning(f'/notice/create/ failed: {e}')
+        logging.warning(f"/notice/create/ failed: {e}")
 
-    logging.info('Install complete (scripts written; no long-running tasks).')
+    logging.info("Install complete.")
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
