@@ -266,12 +266,11 @@ def main() -> None:
     db_username = {db_user}
     db_password = {db_pass}
 
-    # Redis: we run it locally and expose both TCP and UNIX socket
-    # Runtime may use the socket; migrations will hit TCP if needed.
-    # (We also export REDIS_URL=redis://127.0.0.1:6379 during installer steps.)
-    # If you want to force UNIX socket, set REDIS_URL=unix://{redis_sock}
-    # in your env before starting services.
-    # redis_url = unix://{redis_sock}
+    # Redis: we run it locally via a UNIX socket only.
+    # AlmaLinux 9 ships redis-compatible binaries (redis-server/redis-cli) without SCL【237666484660381†L48-L59】.
+    # Use a UNIX socket for all connections rather than TCP to avoid port conflicts and firewall issues.
+    # Discourse will read this setting and connect over the socket.
+    redis_url = unix://{redis_sock}
 
     # Required secret
     secret_key_base = {secret_hex}
@@ -281,10 +280,10 @@ def main() -> None:
     """)
     write(f"{srcdir}/config/discourse.conf", discourse_conf, perms=0o600)
 
-    # redis.conf: enable BOTH TCP and socket
+    # redis.conf: use UNIX socket only. Disable TCP by setting port to 0.
+    # This follows the Opalstack recommendation to run redis via a socket【908843088052382†L72-L78】.
     redis_conf = textwrap.dedent(f"""\
-    bind 127.0.0.1
-    port 6379
+    port 0
     unixsocket {redis_sock}
     unixsocketperm 700
     daemonize yes
@@ -296,40 +295,53 @@ def main() -> None:
     write(f"{appdir}/redis.conf", redis_conf, perms=0o600)
 
     # ---- run migrations & assets with a temporary redis ----
-    # start redis
+    # start redis (or valkey) using the socket-only configuration
     try:
-        subprocess.check_call(["redis-server", f"{appdir}/redis.conf"])
-        # wait briefly for TCP to be ready
+        # Prefer valkey-server on EL9; fall back to redis-server if valkey isn't available.
+        srv = shutil.which("valkey-server") or shutil.which("redis-server") or "valkey-server"
+        subprocess.check_call([srv, f"{appdir}/redis.conf"])
+        # wait until the UNIX socket exists (up to ~10 seconds)
         for _ in range(40):
-            if tcp_port_open("127.0.0.1", 6379):
+            if os.path.exists(redis_sock):
                 break
             time.sleep(0.25)
+        else:
+            # If the socket never appeared, log the last lines of the redis log for debugging.
+            try:
+                log_tail = subprocess.check_output(["tail","-n","100", f"{logdir}/redis.log"]).decode("utf-8","ignore")
+            except Exception:
+                log_tail = "(no redis log)"
+            logging.error("Redis failed to start. Last 100 lines of redis.log:\n" + log_tail)
+            raise RuntimeError("Redis did not start")
     except Exception as e:
-        logging.error(f"Failed to start redis-server: {e}")
+        logging.error(f"Failed to start Redis/Valkey: {e}")
         raise
 
-    # set REDIS_URL explicitly for safety during this phase
+    # set REDIS_URL explicitly for safety during this phase (use UNIX socket)
     MIG_ENV = dict(CMD_ENV)
-    MIG_ENV["REDIS_URL"] = "redis://127.0.0.1:6379"
+    MIG_ENV["REDIS_URL"] = f"unix://{redis_sock}"
 
     try:
         run("bundle exec rake db:migrate", MIG_ENV, cwd=srcdir)
         run("bundle exec rake assets:precompile", MIG_ENV, cwd=srcdir)
     finally:
-        # stop redis
+        # stop redis/valkey using CLI over the socket, falling back to PID kill
         try:
-            subprocess.check_call(["redis-cli", "-p", "6379", "shutdown"])
+            subprocess.check_call(["valkey-cli", "-s", redis_sock, "shutdown"])
         except Exception:
-            # fallback: kill pidfile
-            pidfile = f"{appdir}/tmp/pids/redis.pid"
             try:
-                if os.path.exists(pidfile):
-                    with open(pidfile) as f:
-                        pid = int(f.read().strip() or "0")
-                    if pid > 1:
-                        os.kill(pid, 15)
+                subprocess.check_call(["redis-cli", "-s", redis_sock, "shutdown"])
             except Exception:
-                pass
+                # fallback: kill pidfile
+                pidfile = f"{appdir}/tmp/pids/redis.pid"
+                try:
+                    if os.path.exists(pidfile):
+                        with open(pidfile) as f:
+                            pid = int(f.read().strip() or "0")
+                        if pid > 1:
+                            os.kill(pid, 15)
+                except Exception:
+                    pass
 
     # ---- scripts ----
     setenv = textwrap.dedent(f"""\
@@ -341,6 +353,9 @@ def main() -> None:
     export BUNDLE_PATH="$SRCDIR/vendor/bundle"
     export PATH="$APPDIR/node/bin:$SRCDIR/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
     export TMPDIR="$APPDIR/tmp"
+    # Force all Ruby/JS processes to use the Redis UNIX socket
+    # This ensures we never hit the TCP port and avoids issues with AlmaLinux 9
+    export REDIS_URL="unix://$SRCDIR/tmp/sockets/redis.sock"
     # Enable node & ruby via SCL
     source scl_source enable nodejs22 ruby33
     """)
@@ -358,10 +373,15 @@ def main() -> None:
     source "$APPDIR/setenv"
 
     # Redis (system)
+    # Prefer valkey-server on EL9; fall back to redis-server. Always use our redis.conf with socket-only settings.
     if [ -f "$APPDIR/tmp/pids/redis.pid" ] && kill -0 $(cat "$APPDIR/tmp/pids/redis.pid") 2>/dev/null; then
       :
     else
-      redis-server "$APPDIR/redis.conf"
+      if command -v valkey-server >/dev/null 2>&1; then
+        valkey-server "$APPDIR/redis.conf"
+      else
+        redis-server "$APPDIR/redis.conf"
+      fi
       sleep 1
     fi
 
@@ -402,7 +422,10 @@ def main() -> None:
     fi
     # Redis
     if [ -f "{appdir}/tmp/pids/redis.pid" ]; then
-      redis-cli -p 6379 shutdown || kill $(cat "{appdir}/tmp/pids/redis.pid") || true
+      # Attempt graceful shutdown via socket. Try valkey-cli first then redis-cli; fall back to killing the PID.
+      (valkey-cli -s "{srcdir}/tmp/sockets/redis.sock" shutdown \
+        || redis-cli -s "{srcdir}/tmp/sockets/redis.sock" shutdown \
+        || kill $(cat "{appdir}/tmp/pids/redis.pid")) || true
       rm -f "{appdir}/tmp/pids/redis.pid"
     fi
     echo "stopped"
@@ -420,7 +443,7 @@ def main() -> None:
 
     - Front nginx is Opalstack's; this app runs **Puma** on 127.0.0.1:{port}.
     - **Sidekiq** handles jobs.
-    - **Redis** runs locally and listens on TCP 127.0.0.1:6379 and UNIX socket `{srcdir}/tmp/sockets/redis.sock`.
+    - **Redis** runs locally via a UNIX socket at `{srcdir}/tmp/sockets/redis.sock` and does not expose a TCP port.
 
     ## Start/Stop
     {appdir}/start
@@ -435,7 +458,7 @@ def main() -> None:
     ## Config
     - Edit `{srcdir}/config/discourse.conf` and set `hostname = "your.domain"`.
     - DB created: name/user `{db_name}` (password stored in config).
-    - If you want to force UNIX socket at runtime, export `REDIS_URL=unix://{redis_sock}` before starting.
+    - The installer already configures Discourse to use the socket by default via `redis_url` in `config/discourse.conf` and by exporting `REDIS_URL` in `setenv`.
 
     ## Logs
     - Puma:    {logdir}/puma.*.log
