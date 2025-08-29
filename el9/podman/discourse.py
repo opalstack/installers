@@ -16,14 +16,13 @@ a `yarn.lock` file exists.  The installer therefore checks for the
 presence of `yarn.lock` and runs the appropriate package manager.  The
 logic below is modelled on the official Discourse container template
 (`web.template.yml`), which runs `pnpm install --frozen-lockfile && pnpm prune`
-when no `yarn.lock` is present【669233725289606†L98-L120】.
+when no `yarn.lock` is present.
 
 For more information on Discourse installation guidelines and
-environment requirements, see the upstream documentation【159354044383136†L6-L24】.
+environment requirements, see the upstream documentation.
 The `pnpm` package manager itself requires Node.js 18.12 or newer and can
-be bootstrapped via Corepack【553194873727240†L69-L74】.  This installer uses
-`corepack enable` to make pnpm available in the app’s private `node/bin`
-directory.
+be bootstrapped via Corepack.  This installer uses `corepack enable` to make
+pnpm available in the app’s private `node/bin` directory.
 """
 
 import argparse
@@ -43,6 +42,7 @@ import time
 import urllib.request
 import hashlib
 import shutil
+from typing import Optional  # <-- Python 3.9-safe Optional
 
 # ---------- Opalstack API ----------
 API_URL = (os.environ.get("OPAL_API_URL") or os.environ.get("API_URL") or "https://my.opalstack.com").rstrip("/")
@@ -52,9 +52,7 @@ API_BASE_URI = "/api/v1"
 # Use the same SCL toolchains as the Mastodon installer
 # Use the latest available Node.js collection on the system.  As of August 2025
 # Opalstack offers nodejs22 in addition to nodejs20, so we enable nodejs22 by
-# default alongside ruby33.  If your environment only provides nodejs20 the
-# `nodejs22` collection will silently fall back to nodejs20 because both are
-# typically available via SCL.
+# default alongside ruby33.
 CMD_PREFIX = "/bin/scl enable nodejs22 ruby33 -- "
 
 # Discourse version pin.  If DISCOURSE_TAG env is empty the script will
@@ -112,7 +110,7 @@ def pw(n: int = 24) -> str:
     return "".join(secrets.choice(chars) for _ in range(n))
 
 
-def run(cmd: str, env: dict, cwd: str | None = None, use_shlex: bool = True) -> str:
+def run(cmd: str, env: dict, cwd: Optional[str] = None, use_shlex: bool = True) -> str:
     """Run a command via the SCL-enabled shell and return its stdout as a string.
 
     Commands are prefixed with `CMD_PREFIX` to ensure the nodejs and ruby
@@ -282,20 +280,18 @@ def main() -> None:
     # create directory for node binaries and initialise corepack
     run(f"mkdir -p {appdir}/node/bin", CMD_ENV)
     run(f"corepack enable --install-directory={appdir}/node/bin", CMD_ENV, cwd=f"{appdir}/node")
-    # enable pnpm support via corepack (requires internet to fetch metadata)【553194873727240†L69-L74】
+    # enable pnpm support via corepack
     try:
         run("corepack enable pnpm", CMD_ENV)
     except Exception:
         logging.warning("corepack enable pnpm failed; assuming pnpm is already available")
 
-    # Determine which JS package manager to use.  Modern Discourse versions use
-    # pnpm (if no yarn.lock is present), whereas older releases still use yarn.
+    # Determine which JS package manager to use.
     use_yarn = os.path.exists(os.path.join(srcdir, "yarn.lock"))
     logging.info(f"Using {'yarn' if use_yarn else 'pnpm'} for JS dependencies")
 
-    # Install gems before JS packages to ensure Ruby dependencies are satisfied
+    # Install gems before JS packages
     run("bundle config set without 'development test'", CMD_ENV, cwd=srcdir)
-    # The number of jobs is limited to 4 as in the Mastodon installer
     run("bundle install --jobs 4", CMD_ENV, cwd=srcdir)
 
     if use_yarn:
@@ -303,15 +299,13 @@ def main() -> None:
         run("yarn set version classic", CMD_ENV)
         run("yarn install --frozen-lockfile --network-timeout 600000", CMD_ENV, cwd=srcdir)
     else:
-        # Use pnpm.  Setting CI=1 disables progress spinners and reduces output
+        # Use pnpm
         run("CI=1 pnpm install --frozen-lockfile", CMD_ENV, cwd=srcdir)
-        # prune extraneous packages to save space
         run("pnpm prune", CMD_ENV, cwd=srcdir)
 
     # ---- Discourse configuration ----
     secret_hex = secrets.token_hex(64)
-    # placeholder hostname; users should update this in the README
-    hostname = "forum.example.com"
+    hostname = "forum.example.com"  # placeholder; user updates in README
     redis_sock = f"{srcdir}/tmp/sockets/redis.sock"
 
     discourse_conf = textwrap.dedent(f"""\
@@ -351,8 +345,6 @@ def main() -> None:
 
     # ---- DB migrate & assets ----
     run("bundle exec rake db:migrate", CMD_ENV, cwd=srcdir)
-    # Precompile static assets.  Discourse uses its own asset pipeline; SKIP_EMBER_CLI_COMPILE
-    # is not needed here for production use.
     run("bundle exec rake assets:precompile", CMD_ENV, cwd=srcdir)
 
     # ---- scripts ----
@@ -442,7 +434,7 @@ def main() -> None:
     readme = textwrap.dedent(f"""\
     # Discourse on Opalstack (no Docker)
 
-    This installer deploys the [Discourse](https://discourse.org/) forum software
+    This installer deploys the Discourse forum software
     directly on Opalstack without using Docker.  It follows the same general
     methodology as our Mastodon installer: the application runs **Puma** on
     127.0.0.1:{port}, **Sidekiq** handles background jobs and **Redis** is
@@ -450,16 +442,13 @@ def main() -> None:
 
     ## Important notes
 
-    - Discourse officially supports only Docker-based installations.  See the
-      official install guide for details【159354044383136†L6-L24】.  This installer
+    - Discourse officially supports only Docker-based installations.  This installer
       provides a convenience method for running Discourse under Opalstack but is
       **not** endorsed by the Discourse team.
     - Modern Discourse releases use `pnpm` for JavaScript dependencies.  Our
       installer checks for a `yarn.lock` file and falls back to `pnpm` when
-      appropriate, as recommended by the official container template【669233725289606†L98-L120】.
-    - `pnpm` itself requires Node.js v18.12 or newer; this is satisfied by the
-      `nodejs20` Software Collection and `corepack` will make pnpm available
-      automatically【553194873727240†L69-L74】.
+      appropriate, as reflected in the official container template.
+    - `pnpm` itself requires Node.js v18.12 or newer; the SCLs here satisfy that.
     - After installation, edit `{srcdir}/config/discourse.conf` and set
       `hostname = "your.domain"` to match your own domain name.
 
@@ -469,8 +458,6 @@ def main() -> None:
     {appdir}/restart
 
     ## First admin
-    To create the first admin account, run the following commands:
-
         cd {srcdir}
         {appdir}/setenv
         bundle exec rake admin:create
@@ -481,10 +468,9 @@ def main() -> None:
     - Logs: see `{logdir}` for Puma and Sidekiq logs.
 
     ## Upgrading
-    To upgrade Discourse in the future, repeat the dependency install step
-    (bundle install and pnpm/yarn install), then run `bundle exec rake
-    db:migrate` and `bundle exec rake assets:precompile`.  Refer to the
-    upstream installation guides for more details.
+    Repeat dependency installs, then:
+        bundle exec rake db:migrate
+        bundle exec rake assets:precompile
     """)
 
     write(f"{appdir}/setenv", setenv, 0o700)
