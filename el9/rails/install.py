@@ -170,6 +170,7 @@ def main():
                 RAILS_ENV=development
 
                 # no need to edit below this line
+                export LD_PRELOAD=/usr/lib64/libjemalloc.so
                 export PATH=$PROJECTDIR/bin:$PATH
                 source scl_source enable ruby33 nodejs20
 
@@ -339,6 +340,7 @@ def main():
                 RAILS_ENV=development
 
                 # no need to edit below this line
+                export LD_PRELOAD=/usr/lib64/libjemalloc.so
                 PIDFILE="$PROJECTDIR/tmp/pids/server.pid"
                 export PATH=$PROJECTDIR/bin:$PATH
                 export RAILS_ENV=$RAILS_ENV

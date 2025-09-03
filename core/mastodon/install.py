@@ -487,6 +487,7 @@ def main():
                 [program:puma]
                 directory=/home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}/mastodon
                 environment=
+                    LD_PRELOAD=/usr/lib/libjemalloc.so,
                     RAILS_ENV=production,
                     SOCKET=/home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}/mastodon/tmp/sockets/puma.sock
                 command=bundle exec puma -C /home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}/mastodon/config/puma.rb --pidfile /home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}/mastodon/tmp/pids/puma.pid
@@ -496,6 +497,7 @@ def main():
                 [program:sidekiq]
                 directory=/home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}/mastodon
                 environment=
+                    LD_PRELOAD=/usr/lib/libjemalloc.so
                 command=bundle exec sidekiq -e production -C config/sidekiq.yml
                 stdout_logfile=/home/{appinfo["osuser_name"]}/logs/apps/{appinfo["name"]}/sidekiq.log
                 stderr_logfile=/home/{appinfo["osuser_name"]}/logs/apps/{appinfo["name"]}/sidekiq.log
@@ -594,6 +596,7 @@ def main():
                 RAILS_ENV=production
 
                 # no need to edit below this line
+                export LD_PRELOAD=/usr/lib64/libjemalloc.so
                 export PATH=$HOME/apps/$APPNAME/node/bin:$HOME/apps/$APPNAME/mastodon/bin:/usr/local/bin:/bin:/usr/bin:/usr/local/sbin:/usr/sbin:/opt/puppetlabs/bin:/usr/pgsql-11/bin/:$HOME/.local/bin:$HOME/bin:$PATH
                 export GEM_PATH=$HOME/apps/$APPNAME/mastodon/vendor/bundle/ruby/gems
                 export GEM_HOME=$HOME/apps/$APPNAME/mastodon/

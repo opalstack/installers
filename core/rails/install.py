@@ -178,6 +178,7 @@ def main():
                 RAILS_ENV=development
 
                 # no need to edit below this line
+                export LD_PRELOAD=/usr/lib64/libjemalloc.so
                 export PATH=$PROJECTDIR/bin:$HOME/apps/$APPNAME/env/bin:$PATH
                 export GEM_PATH=$HOME/apps/$APPNAME/env/gems:$GEM_PATH
                 export GEM_HOME=$HOME/apps/$APPNAME/env
@@ -349,6 +350,7 @@ def main():
                 RAILS_ENV=development
 
                 # no need to edit below this line
+                export LD_PRELOAD=/usr/lib64/libjemalloc.so
                 PIDFILE="$PROJECTDIR/tmp/pids/server.pid"
                 export PATH=$PROJECTDIR/bin:$HOME/apps/$APPNAME/env/bin:$PATH
                 export GEM_PATH=$HOME/apps/$APPNAME/env/gems:$GEM_PATH
