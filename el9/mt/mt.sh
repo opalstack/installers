@@ -339,35 +339,44 @@ echo "[step] write README.md" >> "$LOGFILE"
 cat > "$README" <<MD
 # Movable Type on Opalstack — App Layout
 
-We created **two** app pieces:
+There are two separate applications:
 
-1. **$APPNAME** (APA) — the Movable Type admin/CGI lives here  
-   - Path: \`$APPDIR\`  
-   - Bootstrap: \`/mt.cgi\`  
+1. **$APPNAME** (Apache/PHP-FPM) — the Movable Type admin/CGI lives here.
+   - Path: \`$APPDIR\`
+   - Bootstrap: \`/mt.cgi\`
    - Static assets directory: \`$APPDIR/mt-static\`
 
-2. **${APPNAME}_site** (**STA**) — the first **published site directory** (static HTML)  
-   - Path: \`$SITEDIR\`  
-   - We created a filesystem symlink so the site can use Movable Type's assets:  
+2. **${APPNAME}_site** (Static) — the published site lives here.
+   - Path: \`$SITEDIR\`
+   - We created a symbolic link so the site can use Movable Type's assets:
      \`$SITEDIR/mt-static -> $APPDIR/mt-static\`
 
-## Routing (subdomains)
+## Creating your sites
 
-- Route a subdomain (e.g. \`mt.yourdomain.com\`) to **$APPNAME** (APA).  
-- Route another subdomain (e.g. \`blog.yourdomain.com\`) to **${APPNAME}_site** (STA).
+You must create 2 sites:
 
-The site references \`mt-static/\`, which resolves via the filesystem symlink to the MT admin app’s \`mt-static\`.
+- One site to serve the Movable Type application **$APPNAME**. This is the site
+  you will use to author your posts and manage the website.
+- One site to serve the static application **${APPNAME}_site**. This is the
+  published website.
 
-## Additional sites later
+Instructions for creating sites are available at:
+https://docs.opalstack.com/user-guide/sites/
 
-For more sites, repeat:
+## Creating additional sites
 
-1. Create another app via API: type **STA** named like \`${APPNAME}_site2\`.  
-2. In that new site dir, create the symlink:  
+For each additional site:
+
+1. Create a new Static application at https://my.opalstack.com/apps/. This app
+   must be owned by the same shell user as your Movable Type app.
+2. Log in to to SSH as your shell user and run the following command, replacing
+   NEWAPP with the name of the app you created in the previous step.
    \`\`\`bash
-   ln -s "/home/$USER/apps/$APPNAME/mt-static" "/home/$USER/apps/${APPNAME}_site2/mt-static"
+   ln -s "/home/$USER/apps/$APPNAME/mt-static" "/home/$USER/apps/NEWAPP/mt-static"
    \`\`\`
-3. Route a new subdomain to the new **STA** app.
+3. Create a new site at https://my.opalstack.com/domains/ to serve the new app.
+4. Create the new website and blog in Movable Type using the new app directory
+   as the root directory.
 
 MD
 echo "[ok] README.md written" >> "$LOGFILE"
