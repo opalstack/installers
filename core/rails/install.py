@@ -163,6 +163,10 @@ def main():
     socket_dir = f'{appdir}/myproject/tmp/sockets'
     if not os.path.isdir(socket_dir):
         os.mkdir(socket_dir)
+    cmd = "bundle config set force_ruby_platform true"
+    doit = run_command(cmd, CMD_ENV, cwd=f"{appdir}/myproject/")
+    cmd = "bundle install"
+    doit = run_command(cmd, CMD_ENV, cwd=f"{appdir}/myproject/")
 
     # puma start script
     start_puma = textwrap.dedent(f'''\
