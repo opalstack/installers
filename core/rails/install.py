@@ -163,9 +163,9 @@ def main():
     socket_dir = f'{appdir}/myproject/tmp/sockets'
     if not os.path.isdir(socket_dir):
         os.mkdir(socket_dir)
-    cmd = "bundle config set force_ruby_platform true"
+    cmd = "scl enable devtoolset-11 nodejs20 ruby32 -- bundle config set force_ruby_platform true"
     doit = run_command(cmd, CMD_ENV, cwd=f"{appdir}/myproject/")
-    cmd = "bundle install"
+    cmd = "scl enable devtoolset-11 nodejs20 ruby32 -- bundle install"
     doit = run_command(cmd, CMD_ENV, cwd=f"{appdir}/myproject/")
 
     # puma start script
