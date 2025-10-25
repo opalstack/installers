@@ -173,10 +173,12 @@ else
     printf $CEND
 
     # Install wp-cli
-    echo 'WP CLI init'
-    /bin/mkdir -p $HOME/bin/
-    /bin/wget https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar -O $HOME/bin/wp
-    /bin/chmod +x $HOME/bin/wp
+    if [ ! -f "$HOME/bin/wp" ]; then
+      echo 'WP CLI init'
+      /bin/mkdir -p $HOME/bin/
+      /bin/wget https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar -O $HOME/bin/wp
+      /bin/chmod +x $HOME/bin/wp
+    fi
 
     # use wp-cli to install wordpress,
     $HOME/bin/wp cli update
