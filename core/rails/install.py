@@ -167,6 +167,8 @@ def main():
     doit = run_command(cmd, CMD_ENV, cwd=f"{appdir}/myproject/")
     cmd = "scl enable devtoolset-11 nodejs20 ruby32 -- bundle install"
     doit = run_command(cmd, CMD_ENV, cwd=f"{appdir}/myproject/")
+    cmd = "scl enable devtoolset-11 nodejs20 ruby32 -- bundle binstubs bundler"
+    doit = run_command(cmd, CMD_ENV, cwd=f"{appdir}/myproject/")
 
     # puma start script
     start_puma = textwrap.dedent(f'''\
