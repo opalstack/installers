@@ -181,7 +181,7 @@ def main():
                 fi
 
                 cd $PROJECTDIR
-                START="$PROJECTDIR/bin/bundle exec puma -b unix:///$PROJECTDIR/tmp/sockets/puma.sock --pidfile $PIDFILE"
+                START="bundle exec puma -b unix:///$PROJECTDIR/tmp/sockets/puma.sock --pidfile $PIDFILE"
                 ( nohup $START > $PROJECTDIR/log/$RAILS_ENV.log 2>&1 & )
 
                 echo "$APPNAME puma started"
