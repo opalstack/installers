@@ -181,7 +181,7 @@ else
     fi
 
     # use wp-cli to install wordpress,
-    $HOME/bin/wp cli update
+    $HOME/bin/wp cli update --yes
     $HOME/bin/wp core download --path=/home/$USER/apps/$APPNAME
     $HOME/bin/wp core config --dbhost=localhost --dbname=$DBNAME --dbuser=$DBUSER --dbpass=$DBPWD --path=/home/$USER/apps/$APPNAME
     /usr/bin/chmod 644 wp-config.php
