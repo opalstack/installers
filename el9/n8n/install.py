@@ -236,35 +236,68 @@ def main():
     cmd = "scl enable nodejs22 -- npm install --build-from-source"
     run_command(cmd, cwd=projectdir)
 
-    # start script: N8N_PORT + WEBHOOK_URL, NodeJS 22, npm start
+    # start script: daemonized, using working npm start, PID + log
     start_script = textwrap.dedent(
         f"""\
         #!/bin/bash
-        cd "{projectdir}"
+
+        APPDIR="{projectdir}"
+        PIDFILE="$APPDIR/n8n.pid"
+        LOGFILE="$APPDIR/n8n.log"
+
+        cd "$APPDIR"
 
         # n8n port must match the app port assigned by Opalstack
         export N8N_PORT={appinfo["port"]}
 
-        # IMPORTANT: set this to the actual URL of the site attached to this app, trailing slash
-        # example: https://n8n.example.com/
-        export WEBHOOK_URL="https://example.com/"
+        # IMPORTANT: set this to the actual URL of the site attached to this app
+        # (no trailing slash by default; update after you attach the site)
+        export WEBHOOK_URL="https://example.com"
 
-        scl enable nodejs22 -- npm start
+        # Kill any existing process
+        if [ -f "$PIDFILE" ]; then
+            OLD_PID=$(cat "$PIDFILE")
+            if ps -p "$OLD_PID" > /dev/null 2>&1; then
+                kill "$OLD_PID" 2>/dev/null || true
+                sleep 2
+            fi
+            rm -f "$PIDFILE"
+        fi
 
-        echo "Started n8n for {appinfo["name"]}."
+        # Run the same working command as before, just daemonized
+        nohup scl enable nodejs22 -- npm start >> "$LOGFILE" 2>&1 &
+
+        NEW_PID=$!
+        echo "$NEW_PID" > "$PIDFILE"
+
+        echo "Started n8n for {appinfo["name"]} (PID $NEW_PID) on port {appinfo["port"]}."
         """
     )
     create_file(f"{appdir}/start", start_script, perms=0o700)
 
-    # stop script using NodeJS 22 SCL
+    # stop script using PID file
     stop_script = textwrap.dedent(
         f"""\
         #!/bin/bash
-        cd "{projectdir}"
 
-        scl enable nodejs22 -- npm stop
+        APPDIR="{projectdir}"
+        PIDFILE="$APPDIR/n8n.pid"
 
-        echo "Stopped n8n for {appinfo["name"]}."
+        if [ ! -f "$PIDFILE" ]; then
+            echo "No PID file found, nothing to stop for {appinfo["name"]}."
+            exit 0
+        fi
+
+        PID=$(cat "$PIDFILE")
+
+        if ps -p "$PID" > /dev/null 2>&1; then
+            kill "$PID" 2>/dev/null || true
+            echo "Stopped n8n for {appinfo["name"]} (PID $PID)."
+        else
+            echo "Process with PID $PID not running for {appinfo["name"]}."
+        fi
+
+        rm -f "$PIDFILE"
         """
     )
     create_file(f"{appdir}/stop", stop_script, perms=0o700)
@@ -280,7 +313,7 @@ def main():
            and make a note of that site's URL.
 
         2. Edit the `start` script in `{appdir}` and update the `WEBHOOK_URL` value so that
-           it matches the URL you configured in step 1, including the trailing slash.
+           it matches the URL you configured in step 1 (no trailing slash).
 
         3. SSH to the server as your app's shell user and run:
 
@@ -299,6 +332,10 @@ def main():
         Stop your app:
 
             {appdir}/stop
+
+        Logs:
+
+            tail -f {projectdir}/n8n.log
         """
     )
     create_file(f"{appdir}/README", readme, perms=0o600)

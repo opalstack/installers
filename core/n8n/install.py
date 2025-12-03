@@ -186,11 +186,12 @@ def main():
     )
     appinfo = api.get(f'/app/read/{args.app_uuid}')
     appdir = f'/home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}'
+    projectdir = f'{appdir}/n8n'
 
     # ------------------------------------------------------------------
     # Create n8n project and package.json (forum recipe + app port)
     # ------------------------------------------------------------------
-    cmd = f'mkdir -p {appdir}/n8n'
+    cmd = f'mkdir -p {projectdir}'
     _ = run_command(cmd)
 
     pkgjson = textwrap.dedent(
@@ -211,7 +212,7 @@ def main():
         '''
     )
 
-    create_file(f'{appdir}/n8n/package.json', pkgjson, perms=0o600)
+    create_file(f'{projectdir}/package.json', pkgjson, perms=0o600)
 
     # ------------------------------------------------------------------
     # Install n8n + deps with Node 20 + devtoolset-11 + distutils Python
@@ -230,56 +231,45 @@ def main():
 
     # npm install --build-from-source under devtoolset-11 + nodejs20
     cmd = 'scl enable devtoolset-11 nodejs20 -- npm install --build-from-source'
-    _ = run_command(cmd, cwd=f'{appdir}/n8n')
+    _ = run_command(cmd, cwd=projectdir)
 
     # ------------------------------------------------------------------
-    # start / stop scripts (daemonize, like core Node installer)
+    # start / stop scripts (daemonized via nohup + PID, like EL9)
     # ------------------------------------------------------------------
     start_script = textwrap.dedent(
         f'''\
         #!/bin/bash
 
-        APPNAME={appinfo["name"]}
+        APPDIR="{projectdir}"
+        PIDFILE="$APPDIR/n8n.pid"
+        LOGFILE="$APPDIR/n8n.log"
 
-        # set node version via scl
-        source scl_source enable nodejs20
-        NODE=$( which node )
-        NPM=$( which npm )
+        cd "$APPDIR"
 
-        # n8n project info
-        PROJECT=n8n
-        APPDIR=$HOME/apps/$APPNAME
-        LOGDIR=$HOME/logs/apps/$APPNAME
-        TMPDIR=$APPDIR/tmp
-        PROJECTDIR=$APPDIR/$PROJECT
-        PIDFILE=$TMPDIR/node.pid
-
-        mkdir -p "$TMPDIR"
-        mkdir -p "$LOGDIR"
-
-        if [ -e "$PIDFILE" ] && (pgrep -F "$PIDFILE" &> /dev/null); then
-          echo "$APPNAME already running."
-          exit 99
-        fi
-
-        # n8n listens on the app port; set it explicitly
+        # n8n port must match the app port assigned by Opalstack
         export N8N_PORT={appinfo["port"]}
 
         # IMPORTANT: set this to the public URL you will use for this app
-        # e.g. https://n8n.example.com/
-        # export WEBHOOK_URL=https://n8n.example.com/
+        # e.g. https://n8n.example.com
+        export WEBHOOK_URL="https://example.com"
 
-        STARTCMD="$NPM start"
+        # Kill any existing process
+        if [ -f "$PIDFILE" ]; then
+            OLD_PID=$(cat "$PIDFILE")
+            if ps -p "$OLD_PID" > /dev/null 2>&1; then
+                kill "$OLD_PID" 2>/dev/null || true
+                sleep 2
+            fi
+            rm -f "$PIDFILE"
+        fi
 
-        /usr/sbin/daemonize \\
-          -c "$PROJECTDIR" \\
-          -a \\
-          -e "$LOGDIR/error.log" \\
-          -o "$LOGDIR/console.log" \\
-          -p "$PIDFILE" \\
-          $STARTCMD
+        # Run the app in the background using the same npm start that works in foreground
+        nohup scl enable devtoolset-11 nodejs20 -- npm start >> "$LOGFILE" 2>&1 &
 
-        echo "Started n8n for $APPNAME."
+        NEW_PID=$!
+        echo "$NEW_PID" > "$PIDFILE"
+
+        echo "Started n8n for {appinfo["name"]} (PID $NEW_PID) on port {appinfo["port"]}."
         '''
     )
     create_file(f'{appdir}/start', start_script, perms=0o700)
@@ -288,27 +278,24 @@ def main():
         f'''\
         #!/bin/bash
 
-        APPNAME={appinfo["name"]}
-        PIDFILE="$HOME/apps/$APPNAME/tmp/node.pid"
+        APPDIR="{projectdir}"
+        PIDFILE="$APPDIR/n8n.pid"
 
-        if [ ! -e "$PIDFILE" ]; then
-          echo "$PIDFILE missing, maybe $APPNAME is already stopped?"
-          exit 99
+        if [ ! -f "$PIDFILE" ]; then
+            echo "No PID file found, nothing to stop for {appinfo["name"]}."
+            exit 0
         fi
 
-        if [ -e "$PIDFILE" ] && (pgrep -F "$PIDFILE" &> /dev/null); then
-          pkill -g "$(cat "$PIDFILE")"
-          sleep 3
-        fi
+        PID=$(cat "$PIDFILE")
 
-        if [ -e "$PIDFILE" ] && (pgrep -F "$PIDFILE" &> /dev/null); then
-          echo "$APPNAME did not stop, killing it."
-          sleep 3
-          pkill -9 -g "$(cat "$PIDFILE")"
+        if ps -p "$PID" > /dev/null 2>&1; then
+            kill "$PID" 2>/dev/null || true
+            echo "Stopped n8n for {appinfo["name"]} (PID $PID)."
+        else
+            echo "Process with PID $PID not running for {appinfo["name"]}."
         fi
 
         rm -f "$PIDFILE"
-        echo "Stopped n8n for $APPNAME."
         '''
     )
     create_file(f'{appdir}/stop', stop_script, perms=0o700)
@@ -332,7 +319,7 @@ def main():
 
         n8n is installed into:
 
-          {appdir}/n8n
+          {projectdir}
 
         It runs as a Node.js app on port {appinfo["port"]} using nodejs20
         (with devtoolset-11 for native builds and Python 3.11 with distutils).
@@ -349,8 +336,7 @@ def main():
 
         Logs are written to:
 
-          /home/{appinfo["osuser_name"]}/logs/apps/{appinfo["name"]}/console.log
-          /home/{appinfo["osuser_name"]}/logs/apps/{appinfo["name"]}/error.log
+          {projectdir}/n8n.log
 
         ## WEBHOOK_URL
 
@@ -361,7 +347,7 @@ def main():
         You **must** edit the start script and set WEBHOOK_URL to the public
         URL you will use for this app, for example:
 
-          export WEBHOOK_URL=https://n8n.example.com/
+          export WEBHOOK_URL="https://n8n.example.com"
 
         After updating WEBHOOK_URL run:
 
