@@ -10,6 +10,8 @@ import secrets
 import string
 import subprocess
 import shlex
+import random
+import time
 from urllib.parse import urlparse
 
 API_HOST = os.environ.get("API_URL").strip("https://").strip("http://")
@@ -198,6 +200,75 @@ def main():
     appdir = f'/home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}'
     projectdir = f"{appdir}/n8n"
 
+    # create database and database user
+    db_name = f"{args.app_name[:8]}_{args.app_uuid[:8]}"
+    db_pass = gen_password()
+    encryption_key = gen_password(32)
+
+    # create database user
+    payload = json.dumps(
+        [
+            {
+                "server": appinfo["server"],
+                "name": db_name,
+                "password": db_pass,
+                "external": "false",
+            }
+        ]
+    )
+    user_attempts = 0
+    while True:
+        logging.info(f"Trying to create database user {db_name}")
+        maria_user = api.post("/mariauser/create/", payload)
+        time.sleep(5)
+        existing_maria_users = api.get("/mariauser/list/")
+        check_existing = json.loads(json.dumps(existing_maria_users))
+        for check in check_existing:
+            if check["name"] == db_name and check["is_ready"]:
+                logging.info(f"Database user {db_name} created")
+                break
+        else:
+            user_attempts += 1
+            if user_attempts > 10:
+                logging.info(f"Could not create database user {db_name}")
+                sys.exit()
+            continue
+        break
+
+    # create database
+    payload = json.dumps(
+        [{"server": appinfo["server"], "name": db_name, "dbusers_readwrite": []}]
+    )
+    db_attempts = 0
+    while True:
+        logging.info(f"Trying to create database {db_name}")
+        maria_database = api.post("/mariadb/create/", payload)
+        time.sleep(5)
+        existing_maria_databases = api.get("/mariadb/list/")
+        check_existing = json.loads(json.dumps(existing_maria_databases))
+        db_created = False
+        for check in check_existing:
+            if check["name"] == db_name and check["is_ready"]:
+                logging.info(f"Database {db_name} created")
+                payload = json.dumps(
+                    [
+                        {
+                            "id": check["id"],
+                            "dbusers_readwrite": [maria_user[0]["id"]],
+                            "external": "false",
+                        }
+                    ]
+                )
+                maria_password = api.post(f"/mariadb/update/", payload)
+                db_created = True
+        if db_created:
+            break
+        else:
+            db_attempts += 1
+            if db_attempts > 10:
+                logging.info(f"Could not create database {db_name}")
+                sys.exit()
+
     # Make project dir
     cmd = f"mkdir -p {projectdir}"
     run_command(cmd)
@@ -213,7 +284,7 @@ def main():
         },
         "dependencies": {
             "n8n": "^1.106.3",
-            "sqlite3": "^5.1.7",
+            "mysql2": "^3.11.5",
         },
     }
     package_json = json.dumps(package_data, indent=2)
@@ -249,6 +320,21 @@ def main():
 
         # n8n port must match the app port assigned by Opalstack
         export N8N_PORT={appinfo["port"]}
+
+        # Database configuration - MariaDB
+        export DB_TYPE=mysqldb
+        export DB_MYSQLDB_HOST=localhost
+        export DB_MYSQLDB_PORT=3306
+        export DB_MYSQLDB_DATABASE={db_name}
+        export DB_MYSQLDB_USER={db_name}
+        export DB_MYSQLDB_PASSWORD="{db_pass}"
+
+        # Security - encryption key for credentials
+        export N8N_ENCRYPTION_KEY="{encryption_key}"
+
+        # Execution data management - prevent database bloat
+        export EXECUTIONS_DATA_PRUNE=true
+        export EXECUTIONS_DATA_MAX_AGE=168
 
         # IMPORTANT: set this to the actual URL of the site attached to this app
         # (no trailing slash by default; update after you attach the site)
@@ -302,6 +388,11 @@ def main():
     )
     create_file(f"{appdir}/stop", stop_script, perms=0o700)
 
+    # cron job for auto-restart
+    m = random.randint(0, 9)
+    croncmd = f"0{m},1{m},2{m},3{m},4{m},5{m} * * * * {appdir}/start > /dev/null 2>&1"
+    cronjob = add_cronjob(croncmd)
+
     # README with post-install instructions
     readme = textwrap.dedent(
         f"""\
@@ -323,6 +414,26 @@ def main():
         After the app has restarted, you should be able to access the n8n UI at the URL
         you configured for the site.
 
+        ## Database Configuration
+
+        Your n8n instance is configured to use a MariaDB database for production reliability:
+
+        - Database name: {db_name}
+        - Database user: {db_name}
+        - Database password: {db_pass}
+
+        The database credentials are stored in your start script and should not be shared.
+
+        ## Security
+
+        Your installation includes:
+        - A unique encryption key for securing credentials stored in n8n
+        - Automatic execution data pruning (keeps last 7 days)
+        - Dedicated MariaDB database (not SQLite)
+
+        IMPORTANT: On first visit to your n8n URL, immediately set up your admin user
+        to secure your instance.
+
         ## Controlling your app
 
         Start your app:
@@ -336,6 +447,10 @@ def main():
         Logs:
 
             tail -f {projectdir}/n8n.log
+
+        ## Auto-restart
+
+        A cron job runs every 10 minutes to ensure your app stays running.
         """
     )
     create_file(f"{appdir}/README", readme, perms=0o600)

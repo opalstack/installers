@@ -11,6 +11,7 @@ import string
 import subprocess
 import shlex
 import random
+import time
 from urllib.parse import urlparse
 
 API_HOST = os.environ.get('API_URL').strip('https://').strip('http://')
@@ -188,6 +189,75 @@ def main():
     appdir = f'/home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}'
     projectdir = f'{appdir}/n8n'
 
+    # create database and database user
+    db_name = f"{args.app_name[:8]}_{args.app_uuid[:8]}"
+    db_pass = gen_password()
+    encryption_key = gen_password(32)
+
+    # create database user
+    payload = json.dumps(
+        [
+            {
+                "server": appinfo["server"],
+                "name": db_name,
+                "password": db_pass,
+                "external": "false",
+            }
+        ]
+    )
+    user_attempts = 0
+    while True:
+        logging.info(f"Trying to create database user {db_name}")
+        maria_user = api.post("/mariauser/create/", payload)
+        time.sleep(5)
+        existing_maria_users = api.get("/mariauser/list/")
+        check_existing = json.loads(json.dumps(existing_maria_users))
+        for check in check_existing:
+            if check["name"] == db_name and check["is_ready"]:
+                logging.info(f"Database user {db_name} created")
+                break
+        else:
+            user_attempts += 1
+            if user_attempts > 10:
+                logging.info(f"Could not create database user {db_name}")
+                sys.exit()
+            continue
+        break
+
+    # create database
+    payload = json.dumps(
+        [{"server": appinfo["server"], "name": db_name, "dbusers_readwrite": []}]
+    )
+    db_attempts = 0
+    while True:
+        logging.info(f"Trying to create database {db_name}")
+        maria_database = api.post("/mariadb/create/", payload)
+        time.sleep(5)
+        existing_maria_databases = api.get("/mariadb/list/")
+        check_existing = json.loads(json.dumps(existing_maria_databases))
+        db_created = False
+        for check in check_existing:
+            if check["name"] == db_name and check["is_ready"]:
+                logging.info(f"Database {db_name} created")
+                payload = json.dumps(
+                    [
+                        {
+                            "id": check["id"],
+                            "dbusers_readwrite": [maria_user[0]["id"]],
+                            "external": "false",
+                        }
+                    ]
+                )
+                maria_password = api.post(f"/mariadb/update/", payload)
+                db_created = True
+        if db_created:
+            break
+        else:
+            db_attempts += 1
+            if db_attempts > 10:
+                logging.info(f"Could not create database {db_name}")
+                sys.exit()
+
     # ------------------------------------------------------------------
     # Create n8n project and package.json (forum recipe + app port)
     # ------------------------------------------------------------------
@@ -206,7 +276,7 @@ def main():
           }},
           "dependencies": {{
             "n8n": "^1.106.3",
-            "sqlite3": "^5.1.7"
+            "mysql2": "^3.11.5"
           }}
         }}
         '''
@@ -248,6 +318,21 @@ def main():
 
         # n8n port must match the app port assigned by Opalstack
         export N8N_PORT={appinfo["port"]}
+
+        # Database configuration - MariaDB
+        export DB_TYPE=mysqldb
+        export DB_MYSQLDB_HOST=localhost
+        export DB_MYSQLDB_PORT=3306
+        export DB_MYSQLDB_DATABASE={db_name}
+        export DB_MYSQLDB_USER={db_name}
+        export DB_MYSQLDB_PASSWORD="{db_pass}"
+
+        # Security - encryption key for credentials
+        export N8N_ENCRYPTION_KEY="{encryption_key}"
+
+        # Execution data management - prevent database bloat
+        export EXECUTIONS_DATA_PRUNE=true
+        export EXECUTIONS_DATA_MAX_AGE=168
 
         # IMPORTANT: set this to the public URL you will use for this app
         # e.g. https://n8n.example.com
@@ -324,6 +409,42 @@ def main():
         It runs as a Node.js app on port {appinfo["port"]} using nodejs20
         (with devtoolset-11 for native builds and Python 3.11 with distutils).
 
+        ## Post-install steps (IMPORTANT)
+
+        1. Assign your `{args.app_name}` application to a site in your Opalstack control panel
+           and make a note of that site's URL.
+
+        2. Edit the `start` script in `{appdir}` and update the `WEBHOOK_URL` value so that
+           it matches the URL you configured in step 1 (no trailing slash).
+
+        3. SSH to the server as your app's shell user and run:
+
+               {appdir}/stop   # stop the app if it's running
+               {appdir}/start  # start n8n
+
+        After the app has restarted, you should be able to access the n8n UI at the URL
+        you configured for the site.
+
+        ## Database Configuration
+
+        Your n8n instance is configured to use a MariaDB database for production reliability:
+
+        - Database name: {db_name}
+        - Database user: {db_name}
+        - Database password: {db_pass}
+
+        The database credentials are stored in your start script and should not be shared.
+
+        ## Security
+
+        Your installation includes:
+        - A unique encryption key for securing credentials stored in n8n
+        - Automatic execution data pruning (keeps last 7 days)
+        - Dedicated MariaDB database (not SQLite)
+
+        IMPORTANT: On first visit to your n8n URL, immediately set up your admin user
+        to secure your instance.
+
         ## Controlling your app
 
         Start your app by running:
@@ -338,23 +459,9 @@ def main():
 
           {projectdir}/n8n.log
 
-        ## WEBHOOK_URL
+        ## Auto-restart
 
-        The start script automatically sets:
-
-          N8N_PORT={appinfo["port"]}
-
-        You **must** edit the start script and set WEBHOOK_URL to the public
-        URL you will use for this app, for example:
-
-          export WEBHOOK_URL="https://n8n.example.com"
-
-        After updating WEBHOOK_URL run:
-
-          {appdir}/stop
-          {appdir}/start
-
-        to apply the change.
+        A cron job runs every 10 minutes to ensure your app stays running.
         '''
     )
     create_file(f'{appdir}/README', readme, perms=0o600)
