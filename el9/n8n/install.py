@@ -224,7 +224,7 @@ def main():
         existing_maria_users = api.get("/mariauser/list/")
         check_existing = json.loads(json.dumps(existing_maria_users))
         for check in check_existing:
-            if check["name"] == db_name and check["is_ready"]:
+            if check["name"] == db_name and check["ready"]:
                 logging.info(f"Database user {db_name} created")
                 break
         else:
@@ -248,7 +248,7 @@ def main():
         check_existing = json.loads(json.dumps(existing_maria_databases))
         db_created = False
         for check in check_existing:
-            if check["name"] == db_name and check["is_ready"]:
+            if check["name"] == db_name and check["ready"]:
                 logging.info(f"Database {db_name} created")
                 payload = json.dumps(
                     [
