@@ -202,7 +202,6 @@ def main():
 
     # create database and database user
     db_name = f"{args.app_name[:8]}_{args.app_uuid[:8]}"
-    db_pass = gen_password()
     encryption_key = gen_password(32)
 
     # create database user
@@ -215,9 +214,14 @@ def main():
         ]
     )
     user_attempts = 0
+    db_pass = None
     while True:
         logging.info(f"Trying to create database user {db_name}")
         psql_user = api.post("/psqluser/create/", payload)
+        # Capture the auto-generated password from the API response
+        if psql_user and len(psql_user) > 0 and "default_password" in psql_user[0]:
+            db_pass = psql_user[0]["default_password"]
+            logging.info(f"Received database password from API")
         time.sleep(5)
         existing_psql_users = api.get("/psqluser/list/")
         check_existing = json.loads(json.dumps(existing_psql_users))
@@ -232,6 +236,10 @@ def main():
                 sys.exit()
             continue
         break
+    
+    if not db_pass:
+        logging.error("Failed to retrieve database password from API")
+        sys.exit()
 
     # create database
     payload = json.dumps(
