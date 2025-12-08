@@ -204,6 +204,7 @@ def main():
     )
     user_attempts = 0
     db_pass = None
+    psql_user_id = None
     while True:
         logging.info(f"Trying to create database user {db_name}")
         psql_user = api.post("/psqluser/create/", payload)
@@ -216,7 +217,8 @@ def main():
         check_existing = json.loads(json.dumps(existing_psql_users))
         for check in check_existing:
             if check["name"] == db_name and check["ready"]:
-                logging.info(f"Database user {db_name} created")
+                psql_user_id = check["id"]
+                logging.info(f"Database user {db_name} created with ID {psql_user_id}")
                 break
         else:
             user_attempts += 1
@@ -229,10 +231,14 @@ def main():
     if not db_pass:
         logging.error("Failed to retrieve database password from API")
         sys.exit()
+    
+    if not psql_user_id:
+        logging.error("Failed to retrieve database user ID")
+        sys.exit()
 
     # create database
     payload = json.dumps(
-        [{"server": appinfo["server"], "name": db_name, "dbusers_readwrite": []}]
+        [{"server": appinfo["server"], "name": db_name, "dbusers_readwrite": [psql_user_id]}]
     )
     db_attempts = 0
     while True:
@@ -244,17 +250,9 @@ def main():
         db_created = False
         for check in check_existing:
             if check["name"] == db_name and check["ready"]:
-                logging.info(f"Database {db_name} created")
-                payload = json.dumps(
-                    [
-                        {
-                            "id": check["id"],
-                            "dbusers_readwrite": [psql_user[0]["id"]],
-                        }
-                    ]
-                )
-                psql_password = api.post(f"/psqldb/update/", payload)
+                logging.info(f"Database {db_name} created and user permissions assigned")
                 db_created = True
+                break
         if db_created:
             break
         else:
