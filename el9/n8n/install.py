@@ -211,18 +211,16 @@ def main():
             {
                 "server": appinfo["server"],
                 "name": db_name,
-                "password": db_pass,
-                "external": "false",
             }
         ]
     )
     user_attempts = 0
     while True:
         logging.info(f"Trying to create database user {db_name}")
-        maria_user = api.post("/mariauser/create/", payload)
+        psql_user = api.post("/psqluser/create/", payload)
         time.sleep(5)
-        existing_maria_users = api.get("/mariauser/list/")
-        check_existing = json.loads(json.dumps(existing_maria_users))
+        existing_psql_users = api.get("/psqluser/list/")
+        check_existing = json.loads(json.dumps(existing_psql_users))
         for check in check_existing:
             if check["name"] == db_name and check["ready"]:
                 logging.info(f"Database user {db_name} created")
@@ -242,10 +240,10 @@ def main():
     db_attempts = 0
     while True:
         logging.info(f"Trying to create database {db_name}")
-        maria_database = api.post("/mariadb/create/", payload)
+        psql_database = api.post("/psqldb/create/", payload)
         time.sleep(5)
-        existing_maria_databases = api.get("/mariadb/list/")
-        check_existing = json.loads(json.dumps(existing_maria_databases))
+        existing_psql_databases = api.get("/psqldb/list/")
+        check_existing = json.loads(json.dumps(existing_psql_databases))
         db_created = False
         for check in check_existing:
             if check["name"] == db_name and check["ready"]:
@@ -254,12 +252,11 @@ def main():
                     [
                         {
                             "id": check["id"],
-                            "dbusers_readwrite": [maria_user[0]["id"]],
-                            "external": "false",
+                            "dbusers_readwrite": [psql_user[0]["id"]],
                         }
                     ]
                 )
-                maria_password = api.post(f"/mariadb/update/", payload)
+                psql_password = api.post(f"/psqldb/update/", payload)
                 db_created = True
         if db_created:
             break
@@ -284,7 +281,7 @@ def main():
         },
         "dependencies": {
             "n8n": "^1.106.3",
-            "mysql2": "^3.11.5",
+            "pg": "^8.13.1",
         },
     }
     package_json = json.dumps(package_data, indent=2)
@@ -321,13 +318,13 @@ def main():
         # n8n port must match the app port assigned by Opalstack
         export N8N_PORT={appinfo["port"]}
 
-        # Database configuration - MariaDB
-        export DB_TYPE=mysqldb
-        export DB_MYSQLDB_HOST=localhost
-        export DB_MYSQLDB_PORT=3306
-        export DB_MYSQLDB_DATABASE={db_name}
-        export DB_MYSQLDB_USER={db_name}
-        export DB_MYSQLDB_PASSWORD="{db_pass}"
+        # Database configuration - PostgreSQL
+        export DB_TYPE=postgresdb
+        export DB_POSTGRESDB_HOST=localhost
+        export DB_POSTGRESDB_PORT=5432
+        export DB_POSTGRESDB_DATABASE={db_name}
+        export DB_POSTGRESDB_USER={db_name}
+        export DB_POSTGRESDB_PASSWORD="{db_pass}"
 
         # Security - encryption key for credentials
         export N8N_ENCRYPTION_KEY="{encryption_key}"
@@ -416,7 +413,7 @@ def main():
 
         ## Database Configuration
 
-        Your n8n instance is configured to use a MariaDB database for production reliability:
+        Your n8n instance is configured to use a PostgreSQL database for production reliability:
 
         - Database name: {db_name}
         - Database user: {db_name}
@@ -429,7 +426,7 @@ def main():
         Your installation includes:
         - A unique encryption key for securing credentials stored in n8n
         - Automatic execution data pruning (keeps last 7 days)
-        - Dedicated MariaDB database (not SQLite)
+        - Dedicated PostgreSQL database (not SQLite)
 
         IMPORTANT: On first visit to your n8n URL, immediately set up your admin user
         to secure your instance.
