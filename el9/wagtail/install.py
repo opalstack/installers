@@ -229,7 +229,6 @@ DATABASES = {{
         "PASSWORD": "{db_pass}",
         "HOST": "localhost",
         "PORT": "5432",
-        "OPTIONS": {{"sslmode": "require"}},
     }}
 }}
 
@@ -246,40 +245,6 @@ MEDIA_ROOT = os.path.join(BASE_DIR, "media")
     )
 
     logging.info(f"Patched settings for postgres + static/media: {settings_py}")
-
-
-def wait_for_postgres_via_venv(venv_python, db_name, db_pass, timeout_seconds=240):
-    """
-    Real readiness check using venv python (so psycopg import works).
-    Forces SSL to avoid 'no encryption' pg_hba failure.
-    """
-    code = (
-        "import sys\n"
-        "import psycopg\n"
-        "try:\n"
-        "    c = psycopg.connect("
-        f"dbname='{db_name}', user='{db_name}', password='{db_pass}', host='localhost', port='5432', sslmode='require', connect_timeout=5"
-        "    )\n"
-        "    c.close()\n"
-        "    sys.exit(0)\n"
-        "except Exception as e:\n"
-        "    print(str(e))\n"
-        "    sys.exit(2)\n"
-    )
-
-    deadline = time.time() + timeout_seconds
-    last = None
-    while time.time() < deadline:
-        r = subprocess.run([venv_python, "-c", code], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-        if r.returncode == 0:
-            logging.info("PostgreSQL connectivity verified (sslmode=require)")
-            return
-        last = (r.stdout or b"").decode("utf-8", errors="replace")
-        time.sleep(3)
-
-    logging.error("Timed out waiting for PostgreSQL connectivity. Last error:")
-    logging.error(last or "unknown")
-    sys.exit(1)
 
 
 def main():
