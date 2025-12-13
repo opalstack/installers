@@ -5,13 +5,13 @@ import logging
 import os
 import http.client
 import json
-import textwrap
 import secrets
 import string
 import subprocess
 import shlex
 import random
 import time
+import shutil
 
 API_HOST = os.environ.get("API_URL").strip("https://").strip("http://")
 API_BASE_URI = "/api/v1"
@@ -20,6 +20,7 @@ CMD_ENV = {
     "PATH": "/usr/sqlite330/bin:/usr/local/bin:/usr/bin:/bin",
     "UMASK": "0002",
     "LD_LIBRARY_PATH": "/usr/sqlite330/lib",
+    # TMPDIR set after appdir known
 }
 
 DJANGO_VERSION = "5.2.5"
@@ -63,16 +64,16 @@ class OpalstackAPITool:
         return json.loads(conn.getresponse().read())
 
 
+def gen_password(length=20):
+    chars = string.ascii_letters + string.digits
+    return "".join(secrets.choice(chars) for _ in range(length))
+
+
 def create_file(path, contents, perms=0o600):
     with open(path, "w") as f:
         f.write(contents)
     os.chmod(path, perms)
     logging.info(f"Created file {path} with permissions {oct(perms)}")
-
-
-def gen_password(length=20):
-    chars = string.ascii_letters + string.digits
-    return "".join(secrets.choice(chars) for _ in range(length))
 
 
 def run_command(cmd, cwd=None, env=None):
@@ -100,21 +101,14 @@ def ensure_dir(path, perms=0o700):
         logging.info(f"Created directory {path}")
 
 
-def dir_is_empty(path):
-    try:
-        return len(os.listdir(path)) == 0
-    except FileNotFoundError:
-        return True
-
-
-def rmdir_if_empty(path):
-    if os.path.exists(path) and dir_is_empty(path):
-        try:
-            os.rmdir(path)
-            logging.info(f"Removed empty directory {path}")
-        except OSError:
-            # if something created a file between checks
-            pass
+def recreate_empty_dir(path, perms=0o700):
+    """Clean installer: delete any existing dest and recreate empty."""
+    if os.path.exists(path):
+        shutil.rmtree(path, ignore_errors=True)
+        logging.info(f"Removed existing directory {path}")
+    os.makedirs(path, mode=perms, exist_ok=True)
+    os.chmod(path, perms)
+    logging.info(f"Created directory {path} (empty)")
 
 
 def add_cronjob(cronjob):
@@ -133,16 +127,20 @@ def add_cronjob(cronjob):
 
 def create_postgres_db(api, appinfo, args):
     """
-    Create psql user + db and wait until API reports both ready.
-    Still must do a real connection wait afterward (pg_hba/ssl propagation).
+    Follow the n8n-ish pattern:
+    - create psql user (capture default_password)
+    - poll list until ready
+    - create db with user in dbusers_readwrite
+    - poll list until ready
     """
     db_name = f"{args.app_name[:8]}_{args.app_uuid[:8]}"
     db_pass = None
     psql_user_id = None
 
-    # Create DB user (capture default_password)
     payload = json.dumps([{"server": appinfo["server"], "name": db_name}])
-    for attempt in range(1, 31):
+
+    # user
+    for _ in range(30):
         logging.info(f"Trying to create database user {db_name}")
         resp = api.post("/psqluser/create/", payload)
         if resp and isinstance(resp, list) and len(resp) > 0 and "default_password" in resp[0]:
@@ -160,10 +158,10 @@ def create_postgres_db(api, appinfo, args):
             break
 
     if not psql_user_id or not db_pass:
-        logging.error("Could not create database user or retrieve password")
+        logging.error("Failed creating postgres user or retrieving password")
         sys.exit(1)
 
-    # Create DB and grant rw
+    # db
     payload = json.dumps(
         [
             {
@@ -173,7 +171,8 @@ def create_postgres_db(api, appinfo, args):
             }
         ]
     )
-    for attempt in range(1, 31):
+
+    for _ in range(30):
         logging.info(f"Trying to create database {db_name}")
         api.post("/psqldb/create/", payload)
 
@@ -184,82 +183,107 @@ def create_postgres_db(api, appinfo, args):
                 logging.info(f"Database {db_name} created and user permissions assigned")
                 return db_name, db_pass
 
-    logging.error("Could not create database (timed out waiting for ready)")
+    logging.error("Failed creating postgres database (timed out)")
     sys.exit(1)
 
 
-def wait_for_postgres(db_name, db_pass, host="localhost", port="5432", timeout_seconds=180):
-    """
-    Real connectivity wait (NOT just API-ready).
-    Your error shows pg_hba requires encryption, so we force sslmode=require.
-    """
-    try:
-        import psycopg
-    except Exception:
-        logging.error("psycopg is not available to installer runtime; cannot perform db connectivity wait")
-        return
-
-    deadline = time.time() + timeout_seconds
-    last_err = None
-    while time.time() < deadline:
-        try:
-            conn = psycopg.connect(
-                dbname=db_name,
-                user=db_name,
-                password=db_pass,
-                host=host,
-                port=port,
-                sslmode="require",
-                connect_timeout=5,
-            )
-            conn.close()
-            logging.info("PostgreSQL connection verified (sslmode=require)")
-            return
-        except Exception as e:
-            last_err = str(e)
-            time.sleep(3)
-
-    logging.error("Timed out waiting for PostgreSQL connectivity. Last error:")
-    logging.error(last_err or "unknown")
-    sys.exit(1)
+def find_settings_file(project_root):
+    # Wagtail 7.x template usually: mysite/mysite/settings/base.py
+    p1 = os.path.join(project_root, PROJECT_NAME, "settings", "base.py")
+    if os.path.exists(p1):
+        return p1
+    # fallback: settings.py in package
+    p2 = os.path.join(project_root, PROJECT_NAME, "settings.py")
+    if os.path.exists(p2):
+        return p2
+    return None
 
 
 def patch_settings_for_postgres(settings_py, db_name, db_pass):
     """
-    Append override so it wins; include sslmode=require to satisfy pg_hba.
+    Key points:
+    - pg_hba error showed "no encryption" -> MUST force SSL.
+    - append at end so it wins.
     """
-    override = textwrap.dedent(
-        f"""\
-        # Opalstack PostgreSQL configuration
-        DATABASES = {{
-            "default": {{
-                "ENGINE": "django.db.backends.postgresql",
-                "NAME": "{db_name}",
-                "USER": "{db_name}",
-                "PASSWORD": "{db_pass}",
-                "HOST": "localhost",
-                "PORT": "5432",
-                "OPTIONS": {{"sslmode": "require"}},
-            }}
-        }}
-        """
-    )
-
     with open(settings_py, "r") as f:
         contents = f.read()
 
-    if "Opalstack PostgreSQL configuration" in contents:
-        logging.info(f"PostgreSQL override already present in {settings_py}, skipping")
+    if "import os" not in contents:
+        # unlikely for Wagtail template, but make it safe
+        contents = "import os\n" + contents
+        with open(settings_py, "w") as f:
+            f.write(contents)
+
+    if "Opalstack installer overrides" in contents:
+        logging.info(f"Overrides already present in {settings_py}, skipping append")
         return
 
-    with open(settings_py, "a") as f:
-        f.write("\n" + override)
+    override = f"""
+# Opalstack installer overrides
 
-    logging.info(f"Appended PostgreSQL DATABASES override to {settings_py}")
+DATABASES = {{
+    "default": {{
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": "{db_name}",
+        "USER": "{db_name}",
+        "PASSWORD": "{db_pass}",
+        "HOST": "localhost",
+        "PORT": "5432",
+        "OPTIONS": {{"sslmode": "require"}},
+    }}
+}}
+
+STATIC_ROOT = os.path.join(BASE_DIR, "static_collected")
+MEDIA_ROOT = os.path.join(BASE_DIR, "media")
+"""
+
+    with open(settings_py, "a") as f:
+        f.write(override)
+
+    # allow wildcard allowed hosts for bootstrap
+    run_command(
+        f'''sed -r -i "s/^ALLOWED_HOSTS\\s*=\\s*\\[[^\\]]*\\]/ALLOWED_HOSTS = \\['*'\\]/" {settings_py}'''
+    )
+
+    logging.info(f"Patched settings for postgres + static/media: {settings_py}")
+
+
+def wait_for_postgres_via_venv(venv_python, db_name, db_pass, timeout_seconds=240):
+    """
+    Real readiness check using venv python (so psycopg import works).
+    Forces SSL to avoid 'no encryption' pg_hba failure.
+    """
+    code = (
+        "import sys\n"
+        "import psycopg\n"
+        "try:\n"
+        "    c = psycopg.connect("
+        f"dbname='{db_name}', user='{db_name}', password='{db_pass}', host='localhost', port='5432', sslmode='require', connect_timeout=5"
+        "    )\n"
+        "    c.close()\n"
+        "    sys.exit(0)\n"
+        "except Exception as e:\n"
+        "    print(str(e))\n"
+        "    sys.exit(2)\n"
+    )
+
+    deadline = time.time() + timeout_seconds
+    last = None
+    while time.time() < deadline:
+        r = subprocess.run([venv_python, "-c", code], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        if r.returncode == 0:
+            logging.info("PostgreSQL connectivity verified (sslmode=require)")
+            return
+        last = (r.stdout or b"").decode("utf-8", errors="replace")
+        time.sleep(3)
+
+    logging.error("Timed out waiting for PostgreSQL connectivity. Last error:")
+    logging.error(last or "unknown")
+    sys.exit(1)
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Installs Wagtail on an Opalstack account")
+    parser = argparse.ArgumentParser(description="Installs Wagtail (Django CMS) on an Opalstack account")
     parser.add_argument("-i", dest="app_uuid", default=os.environ.get("UUID"))
     parser.add_argument("-n", dest="app_name", default=os.environ.get("APPNAME"))
     parser.add_argument("-t", dest="opal_token", default=os.environ.get("OPAL_TOKEN"))
@@ -268,11 +292,11 @@ def main():
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="[%(asctime)s] %(levelname)s: %(message)s")
-
     logging.info(f"Started installation of Wagtail app {args.app_name}")
-    api = OpalstackAPITool(API_HOST, API_BASE_URI, args.opal_token, args.opal_user, args.opal_password)
 
+    api = OpalstackAPITool(API_HOST, API_BASE_URI, args.opal_token, args.opal_user, args.opal_password)
     appinfo = api.get(f"/app/read/{args.app_uuid}")
+
     appdir = f"/home/{appinfo['osuser_name']}/apps/{appinfo['name']}"
     project_root = f"{appdir}/{PROJECT_NAME}"
 
@@ -280,7 +304,7 @@ def main():
     ensure_dir(f"{appdir}/tmp", 0o700)
     CMD_ENV["TMPDIR"] = f"{appdir}/tmp"
 
-    # Postgres (API-ready)
+    # postgres
     db_name, db_pass = create_postgres_db(api, appinfo, args)
 
     # python
@@ -297,13 +321,15 @@ def main():
         sys.exit(1)
     logging.info(f"Created virtualenv at {appdir}/env")
 
-    # pip deps
+    venv_python = f"{appdir}/env/bin/python"
+
+    # deps
     steps = [
-        (f"{appdir}/env/bin/pip install --upgrade pip", "Failed upgrading pip"),
-        (f"{appdir}/env/bin/pip install uwsgi", "Failed installing uwsgi"),
-        (f'{appdir}/env/bin/pip install "django=={DJANGO_VERSION}"', "Failed installing Django"),
-        (f'{appdir}/env/bin/pip install "wagtail=={WAGTAIL_VERSION}"', "Failed installing Wagtail"),
-        (f'{appdir}/env/bin/pip install "psycopg[binary]"', "Failed installing psycopg"),
+        (f"{appdir}/env/bin/pip install --upgrade pip", "pip upgrade failed"),
+        (f"{appdir}/env/bin/pip install uwsgi", "uwsgi install failed"),
+        (f'{appdir}/env/bin/pip install "django=={DJANGO_VERSION}"', "django install failed"),
+        (f'{appdir}/env/bin/pip install "wagtail=={WAGTAIL_VERSION}"', "wagtail install failed"),
+        (f'{appdir}/env/bin/pip install "psycopg[binary]"', "psycopg install failed"),
     ]
     for cmd, err in steps:
         rc, _ = run_command(cmd)
@@ -318,53 +344,28 @@ def main():
 
     logging.info(f"Installed Django {DJANGO_VERSION}, Wagtail {WAGTAIL_VERSION}, psycopg into virtualenv")
 
-    # scaffold (bulletproof): do NOT precreate non-empty dir
-    if os.path.exists(project_root) and not dir_is_empty(project_root):
-        logging.error(f"{project_root} exists and is not empty; refusing to overlay. Delete it and rerun.")
-        sys.exit(1)
-    rmdir_if_empty(project_root)
+    # Wagtail start: dest MUST exist, and MUST be empty -> recreate it
+    recreate_empty_dir(project_root, 0o700)
 
     rc, _ = run_command(f"{appdir}/env/bin/wagtail start {PROJECT_NAME} {project_root}")
     if rc != 0:
         logging.error("Failed running wagtail start")
         sys.exit(1)
+
     logging.info(f"Populated Wagtail project directory {project_root}")
 
-    # settings path
-    settings_py = f"{project_root}/{PROJECT_NAME}/settings/base.py"
-    if not os.path.exists(settings_py):
-        settings_py = f"{project_root}/{PROJECT_NAME}/settings.py"
-    if not os.path.exists(settings_py):
+    # settings patch BEFORE migrate
+    settings_py = find_settings_file(project_root)
+    if not settings_py:
         logging.error("Could not locate Wagtail settings file; cannot configure database")
         sys.exit(1)
 
-    # ALLOWED_HOSTS
-    run_command(
-        f'''sed -r -i "s/^ALLOWED_HOSTS\\s*=\\s*\\[[^\\]]*\\]/ALLOWED_HOSTS = \\['*'\\]/" {settings_py}'''
-    )
-
-    # STATIC_ROOT / MEDIA_ROOT
-    with open(settings_py, "r") as f:
-        contents = f.read()
-    if "STATIC_ROOT" not in contents or "MEDIA_ROOT" not in contents:
-        append_cfg = textwrap.dedent(
-            """\
-            # Opalstack defaults
-            STATIC_ROOT = os.path.join(BASE_DIR, 'static_collected')
-            MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
-            """
-        )
-        with open(settings_py, "a") as f:
-            f.write("\n" + append_cfg)
-        logging.info(f"Appended STATIC_ROOT/MEDIA_ROOT to {settings_py}")
-
-    # DB config (sslmode=require)
     patch_settings_for_postgres(settings_py, db_name, db_pass)
 
-    # Real DB connectivity wait (this is what you’re yelling about — correctly)
-    wait_for_postgres(db_name, db_pass, host="localhost", port="5432", timeout_seconds=240)
+    # wait for real postgres connectivity (ssl) BEFORE migrate
+    wait_for_postgres_via_venv(venv_python, db_name, db_pass, timeout_seconds=240)
 
-    # uwsgi.ini + start/stop
+    # uwsgi config + scripts
     wsgi_file = f"{project_root}/{PROJECT_NAME}/wsgi.py"
     if not os.path.exists(wsgi_file):
         alt = f"{project_root}/config/wsgi.py"
@@ -374,68 +375,63 @@ def main():
         logging.error("Could not locate wsgi.py")
         sys.exit(1)
 
-    uwsgi_conf = textwrap.dedent(
-        f"""\
-        [uwsgi]
-        master = True
-        http-socket = 127.0.0.1:{appinfo["port"]}
-        env = LD_LIBRARY_PATH=/usr/sqlite330/lib
-        virtualenv = {appdir}/env/
-        daemonize = /home/{appinfo["osuser_name"]}/logs/apps/{appinfo["name"]}/uwsgi.log
-        pidfile = {appdir}/tmp/uwsgi.pid
-
-        workers = 2
-        threads = 2
-
-        chdir = {project_root}
-        python-path = {project_root}
-        wsgi-file = {wsgi_file}
-        touch-reload = {wsgi_file}
-        """
+    uwsgi_conf = (
+        "[uwsgi]\n"
+        "master = True\n"
+        f"http-socket = 127.0.0.1:{appinfo['port']}\n"
+        "env = LD_LIBRARY_PATH=/usr/sqlite330/lib\n"
+        f"virtualenv = {appdir}/env/\n"
+        f"daemonize = /home/{appinfo['osuser_name']}/logs/apps/{appinfo['name']}/uwsgi.log\n"
+        f"pidfile = {appdir}/tmp/uwsgi.pid\n"
+        "\n"
+        "workers = 2\n"
+        "threads = 2\n"
+        "\n"
+        f"chdir = {project_root}\n"
+        f"python-path = {project_root}\n"
+        f"wsgi-file = {wsgi_file}\n"
+        f"touch-reload = {wsgi_file}\n"
     )
     create_file(f"{appdir}/uwsgi.ini", uwsgi_conf, perms=0o600)
 
-    start_script = f"""#!/bin/bash
-export TMPDIR={appdir}/tmp
-export LD_LIBRARY_PATH=/usr/sqlite330/lib
-mkdir -p {appdir}/tmp
-
-PIDFILE="{appdir}/tmp/uwsgi.pid"
-if [ -e "$PIDFILE" ] && (pgrep -u {appinfo["osuser_name"]} | grep -x -f $PIDFILE &> /dev/null); then
-  echo "uWSGI for {appinfo["name"]} already running."
-  exit 99
-fi
-
-{appdir}/env/bin/uwsgi --ini {appdir}/uwsgi.ini
-echo "Started uWSGI for {appinfo["name"]}."
-"""
+    start_script = (
+        "#!/bin/bash\n"
+        f"export TMPDIR={appdir}/tmp\n"
+        "export LD_LIBRARY_PATH=/usr/sqlite330/lib\n"
+        f"mkdir -p {appdir}/tmp\n"
+        f'PIDFILE="{appdir}/tmp/uwsgi.pid"\n'
+        'if [ -f "$PIDFILE" ]; then\n'
+        '  PID=$(cat "$PIDFILE" 2>/dev/null)\n'
+        '  if [ -n "$PID" ] && kill -0 "$PID" 2>/dev/null; then\n'
+        f'    echo "uWSGI for {appinfo["name"]} already running."\n'
+        "    exit 99\n"
+        "  fi\n"
+        "fi\n"
+        f"{appdir}/env/bin/uwsgi --ini {appdir}/uwsgi.ini\n"
+        f'echo "Started uWSGI for {appinfo["name"]}."\n'
+    )
     create_file(f"{appdir}/start", start_script, perms=0o700)
 
-    stop_script = f"""#!/bin/bash
-PIDFILE="{appdir}/tmp/uwsgi.pid"
-if [ ! -e "$PIDFILE" ]; then
-  echo "$PIDFILE missing, maybe uWSGI is already stopped?"
-  exit 99
-fi
-
-PID=$(cat $PIDFILE)
-if [ -e "$PIDFILE" ] && (pgrep -u {appinfo["osuser_name"]} | grep -x -f $PIDFILE &> /dev/null); then
-  {appdir}/env/bin/uwsgi --stop $PIDFILE
-  sleep 3
-fi
-
-if [ -e "$PIDFILE" ] && (pgrep -u {appinfo["osuser_name"]} | grep -x -f $PIDFILE &> /dev/null); then
-  echo "uWSGI did not stop, killing it."
-  sleep 3
-  kill -9 $PID
-fi
-
-rm -f $PIDFILE
-echo "Stopped."
-"""
+    stop_script = (
+        "#!/bin/bash\n"
+        f'PIDFILE="{appdir}/tmp/uwsgi.pid"\n'
+        'if [ ! -f "$PIDFILE" ]; then\n'
+        '  echo "PIDFILE missing, maybe uWSGI is already stopped?"\n'
+        "  exit 99\n"
+        "fi\n"
+        'PID=$(cat "$PIDFILE" 2>/dev/null)\n'
+        f"{appdir}/env/bin/uwsgi --stop $PIDFILE 2>/dev/null\n"
+        "sleep 2\n"
+        'if [ -n "$PID" ] && kill -0 "$PID" 2>/dev/null; then\n'
+        '  echo "uWSGI did not stop cleanly; killing."\n'
+        '  kill -9 "$PID" 2>/dev/null\n'
+        "fi\n"
+        'rm -f "$PIDFILE"\n'
+        'echo "Stopped."\n'
+    )
     create_file(f"{appdir}/stop", stop_script, perms=0o700)
 
-    # migrate (HARD FAIL if rc != 0)
+    # migrate (HARD FAIL)
     rc, _ = run_command(f"{appdir}/env/bin/python manage.py migrate", cwd=project_root)
     if rc != 0:
         logging.error("Django migrate failed; aborting.")
@@ -447,50 +443,48 @@ echo "Stopped."
         logging.error("collectstatic failed; aborting.")
         sys.exit(1)
 
-    logging.info("Applied migrations and collected static files")
-
     # cron keepalive
     m = random.randint(0, 9)
     croncmd = f"0{m},1{m},2{m},3{m},4{m},5{m} * * * * {appdir}/start > /dev/null 2>&1"
     add_cronjob(croncmd)
 
     # README (plain text)
-    readme = f"""Opalstack Wagtail Installation
-
-Application name:
-{args.app_name}
-
-Python virtualenv:
-{appdir}/env
-
-Project directory:
-{project_root}
-
-PostgreSQL database:
-Name: {db_name}
-User: {db_name}
-Password: {db_pass}
-Host: localhost
-Port: 5432
-SSL: required
-
-Logs:
-uWSGI log:
-home/{appinfo["osuser_name"]}/logs/apps/{appinfo["name"]}/uwsgi.log
-
-Next steps:
-1) Connect this app to a site route in the Opalstack control panel.
-2) Create an admin user:
-   cd {project_root}
-   source {appdir}/env/bin/activate
-   python manage.py createsuperuser
-3) Restart:
-   {appdir}/stop
-   {appdir}/start
-"""
+    readme = (
+        "Opalstack Wagtail Installation\n"
+        "\n"
+        "Application name:\n"
+        f"{args.app_name}\n"
+        "\n"
+        "Python virtualenv:\n"
+        f"{appdir}/env\n"
+        "\n"
+        "Project directory:\n"
+        f"{project_root}\n"
+        "\n"
+        "PostgreSQL database:\n"
+        f"Name: {db_name}\n"
+        f"User: {db_name}\n"
+        f"Password: {db_pass}\n"
+        "Host: localhost\n"
+        "Port: 5432\n"
+        "SSL: required\n"
+        "\n"
+        "Logs:\n"
+        f"/home/{appinfo['osuser_name']}/logs/apps/{appinfo['name']}/uwsgi.log\n"
+        "\n"
+        "Next steps:\n"
+        "1) Connect this app to a site route in the Opalstack control panel.\n"
+        "2) Create an admin user:\n"
+        f"   cd {project_root}\n"
+        f"   source {appdir}/env/bin/activate\n"
+        "   python manage.py createsuperuser\n"
+        "3) Restart:\n"
+        f"   {appdir}/stop\n"
+        f"   {appdir}/start\n"
+    )
     create_file(f"{appdir}/README", readme, perms=0o600)
 
-    # start it (HARD FAIL if rc != 0)
+    # start it (HARD FAIL)
     rc, _ = run_command(f"{appdir}/start")
     if rc != 0:
         logging.error("Failed starting uWSGI")
