@@ -363,7 +363,7 @@ def main():
     patch_settings_for_postgres(settings_py, db_name, db_pass)
 
     # wait for real postgres connectivity (ssl) BEFORE migrate
-    wait_for_postgres_via_venv(venv_python, db_name, db_pass, timeout_seconds=240)
+    #wait_for_postgres_via_venv(venv_python, db_name, db_pass, timeout_seconds=240)
 
     # uwsgi config + scripts
     wsgi_file = f"{project_root}/{PROJECT_NAME}/wsgi.py"
