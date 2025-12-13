@@ -315,7 +315,7 @@ def main():
     logging.info(f"Installed Django {DJANGO_VERSION}, Wagtail {WAGTAIL_VERSION}, psycopg into virtualenv")
 
     # create project dir + scaffold
-    #ensure_dir(project_root, 0o700)
+    ensure_dir(project_root, 0o700)
     run_command_or_die(f"{appdir}/env/bin/wagtail start {PROJECT_NAME} {project_root}", err="Failed running wagtail start")
     logging.info(f"Populated Wagtail project directory {project_root}")
 
