@@ -176,6 +176,10 @@ def main():
     cmd = f'scl enable devtoolset-11 nodejs18 -- {appdir}/node/bin/ghost config set server[\'port\'] {appinfo["port"]}'
     doit = run_command(cmd, cwd=f'{appdir}/ghost')
 
+    # configure content path
+    cmd = f'scl enable devtoolset-11 nodejs18 -- {appdir}/node/bin/ghost config set paths[\'contentPath\'] {appdir}/ghost/content'
+    doit = run_command(cmd, cwd=f'{appdir}/ghost')
+
     # configure db
     cmd = f'scl enable devtoolset-11 nodejs18 -- {appdir}/node/bin/ghost config set database[\'client\'] sqlite3'
     doit = run_command(cmd, cwd=f'{appdir}/ghost')

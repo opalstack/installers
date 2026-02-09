@@ -249,6 +249,10 @@ def main():
     cmd = f'scl enable nodejs22 -- {appdir}/node/bin/ghost config set server[\'port\'] {appinfo["port"]}'
     doit = run_command(cmd, cwd=f'{appdir}/ghost')
 
+    # configure content path
+    cmd = f'scl enable nodejs22 -- {appdir}/node/bin/ghost config set paths[\'contentPath\'] {appdir}/ghost/content'
+    doit = run_command(cmd, cwd=f'{appdir}/ghost')
+
     # configure db
     cmd = f'scl enable nodejs22 -- {appdir}/node/bin/ghost config set database[\'client\'] mysql'
     doit = run_command(cmd, cwd=f'{appdir}/ghost')
