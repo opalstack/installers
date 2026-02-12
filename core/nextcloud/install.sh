@@ -177,10 +177,10 @@ else
     echo $app_pass
 
     # install with occ
-    /bin/php82 -d memory_limit=512M $HOME/apps/$APPNAME/occ maintenance:install --database pgsql --database-name $DBNAME --database-user $DBUSER --database-pass $DBPWD --admin-user $USER --admin-pass $app_pass --admin-email $accountemail --data-dir $HOME/apps/$APPNAME/data
+    /bin/php83 -d memory_limit=512M $HOME/apps/$APPNAME/occ maintenance:install --database pgsql --database-name $DBNAME --database-user $DBUSER --database-pass $DBPWD --admin-user $USER --admin-pass $app_pass --admin-email $accountemail --data-dir $HOME/apps/$APPNAME/data
 
     # set crontab
-    (crontab -l ; echo "*/5  *  *  *  * /bin/php82 $HOME/apps/$APPNAME/cron.php")| crontab -
+    (crontab -l ; echo "*/5  *  *  *  * /bin/php83 $HOME/apps/$APPNAME/cron.php")| crontab -
 
     # Send JSON installed OK.
     /usr/bin/curl -s -X POST --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN" -d'[{"id": "'$UUID'"}]' $API_URL/api/v1/app/installed/
