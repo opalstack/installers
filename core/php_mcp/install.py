@@ -200,7 +200,7 @@ def create_readme(appdir, appname):
         - **Rate Limiting**: 120 requests per minute per IP address
         - **Request Size Limit**: 2MB maximum request body
 
-        ### ⚠️ DANGERS & RISKS
+        ### !!! DANGERS & RISKS
 
         **This server provides powerful file access. Understand the risks:**
 
