@@ -286,8 +286,8 @@ def main():
             "stop": f'PORT={appinfo["port"]} n8n stop',
         },
         "dependencies": {
-            "n8n": "^1.106.3",
-            "pg": "^8.13.1",
+            "n8n": "^2.10.3",
+            "pg": "^8.19.0",
         },
     }
     package_json = json.dumps(package_data, indent=2)
