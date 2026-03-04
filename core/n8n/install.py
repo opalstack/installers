@@ -333,6 +333,9 @@ def main():
         # Security - encryption key for credentials
         export N8N_ENCRYPTION_KEY="{encryption_key}"
 
+        # Community packages not compatible on CentOS 7
+        export N8N_COMMUNITY_PACKAGES_ENABLED=false
+
         # Execution data management - prevent database bloat
         export EXECUTIONS_DATA_PRUNE=true
         export EXECUTIONS_DATA_MAX_AGE=168
