@@ -315,7 +315,7 @@ def main():
 
         APPDIR="{projectdir}"
         PIDFILE="$APPDIR/n8n.pid"
-        LOGFILE="$APPDIR/n8n.log"
+        LOGFILE="$HOME/logs/apps/{appinfo['name']}/n8n.log"
 
         cd "$APPDIR"
 
