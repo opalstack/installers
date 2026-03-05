@@ -355,7 +355,8 @@ def main():
         fi
 
         # Run the app in the background using the same npm start that works in foreground
-        nohup scl enable devtoolset-11 nodejs20 -- npm start >> "$LOGFILE" 2>&1 &
+        source scl_source enable devtoolset-11
+        nohup npm start >> "$LOGFILE" 2>&1 &
 
         NEW_PID=$!
         echo "$NEW_PID" > "$PIDFILE"

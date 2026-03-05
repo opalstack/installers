@@ -354,7 +354,8 @@ def main():
         fi
 
         # Run the same working command as before, just daemonized
-        nohup scl enable nodejs22 -- npm start >> "$LOGFILE" 2>&1 &
+        source scl_source enable nodejs22
+        nohup npm start >> "$LOGFILE" 2>&1 &
 
         NEW_PID=$!
         echo "$NEW_PID" > "$PIDFILE"
