@@ -278,7 +278,7 @@ def main():
             "stop": "PORT={appinfo["port"]} n8n stop"
           }},
           "dependencies": {{
-            "n8n": "^1.106.3",
+            "n8n": "^1.123.23",
             "pg": "^8.13.1"
           }}
         }}
