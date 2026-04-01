@@ -151,7 +151,7 @@ def main():
     # install ghostcli
     cmd = f'mkdir -p {appdir}/node'
     doit = run_command(cmd)
-    cmd = f'scl enable devtoolset-11 nodejs18 -- npm install ghost-cli@latest --prefix={appdir}/node/'
+    cmd = f'scl enable devtoolset-11 nodejs20 -- npm install ghost-cli@latest --prefix={appdir}/node/'
     doit = run_command(cmd, cwd=f'{appdir}/node/')
     cmd = 'ln -s node_modules/.bin bin'
     doit = run_command(cmd, cwd=f'{appdir}/node/')
@@ -161,29 +161,29 @@ def main():
     doit = run_command(cmd)
     CMD_ENV['NPM_CONFIG_BUILD_FROM_SOURCE'] = 'true'
     CMD_ENV['NODE_GYP_FORCE_PYTHON'] = '/usr/local/bin/python3.11'
-    cmd = f'scl enable devtoolset-11 nodejs18 -- {appdir}/node/bin/ghost install v5.130.2 --no-setup-linux-user --no-setup --port {appinfo["port"]} --log file --no-start --db sqlite3'
+    cmd = f'scl enable devtoolset-11 nodejs20 -- {appdir}/node/bin/ghost install v5.130.2 --no-setup-linux-user --no-setup --port {appinfo["port"]} --log file --no-start --db sqlite3'
     doit = run_command(cmd, cwd=f'{appdir}/ghost')
 
     # configure log dir
-    cmd = f'scl enable devtoolset-11 nodejs18 -- {appdir}/node/bin/ghost config set logging[\'path\'] \'/home/{appinfo["osuser_name"]}/logs/apps/{appinfo["name"]}/\''
+    cmd = f'scl enable devtoolset-11 nodejs20 -- {appdir}/node/bin/ghost config set logging[\'path\'] \'/home/{appinfo["osuser_name"]}/logs/apps/{appinfo["name"]}/\''
     doit = run_command(cmd, cwd=f'{appdir}/ghost')
 
     # configure mail transport
-    cmd = f'scl enable devtoolset-11 nodejs18 -- {appdir}/node/bin/ghost config set mail[\'transport\'] sendmail'
+    cmd = f'scl enable devtoolset-11 nodejs20 -- {appdir}/node/bin/ghost config set mail[\'transport\'] sendmail'
     doit = run_command(cmd, cwd=f'{appdir}/ghost')
 
     # configure port
-    cmd = f'scl enable devtoolset-11 nodejs18 -- {appdir}/node/bin/ghost config set server[\'port\'] {appinfo["port"]}'
+    cmd = f'scl enable devtoolset-11 nodejs20 -- {appdir}/node/bin/ghost config set server[\'port\'] {appinfo["port"]}'
     doit = run_command(cmd, cwd=f'{appdir}/ghost')
 
     # configure content path
-    cmd = f'scl enable devtoolset-11 nodejs18 -- {appdir}/node/bin/ghost config set paths[\'contentPath\'] {appdir}/ghost/content'
+    cmd = f'scl enable devtoolset-11 nodejs20 -- {appdir}/node/bin/ghost config set paths[\'contentPath\'] {appdir}/ghost/content'
     doit = run_command(cmd, cwd=f'{appdir}/ghost')
 
     # configure db
-    cmd = f'scl enable devtoolset-11 nodejs18 -- {appdir}/node/bin/ghost config set database[\'client\'] sqlite3'
+    cmd = f'scl enable devtoolset-11 nodejs20 -- {appdir}/node/bin/ghost config set database[\'client\'] sqlite3'
     doit = run_command(cmd, cwd=f'{appdir}/ghost')
-    cmd = f'scl enable devtoolset-11 nodejs18 -- {appdir}/node/bin/ghost config set database[\'connection\'][\'filename\'] {appdir}/ghost.db'
+    cmd = f'scl enable devtoolset-11 nodejs20 -- {appdir}/node/bin/ghost config set database[\'connection\'][\'filename\'] {appdir}/ghost.db'
     doit = run_command(cmd, cwd=f'{appdir}/ghost')
 
     # set instance name in ghost cli
@@ -197,7 +197,7 @@ def main():
     setenv = textwrap.dedent(f'''\
                 #!/bin/bash
                 source /opt/rh/devtoolset-11/enable
-                source /opt/nodejs18/enable
+                source /opt/nodejs20/enable
                 export NPM_CONFIG_BUILD_FROM_SOURCE=true
                 export NODE_GYP_FORCE_PYTHON=/usr/local/bin/python3.11
                 PATH="$( cd "$( dirname "${{BASH_SOURCE[0]}}" )" && pwd )"/node/bin:$PATH
@@ -207,7 +207,7 @@ def main():
     # start script
     start_script = textwrap.dedent(f'''\
                 #!/bin/bash
-                PATH={appdir}/node/bin:$PATH scl enable devtoolset-11 nodejs18 -- ghost start -d {appdir}/ghost
+                PATH={appdir}/node/bin:$PATH scl enable devtoolset-11 nodejs20 -- ghost start -d {appdir}/ghost
                 echo "Started Ghost for {appinfo["name"]}."
                 ''')
     create_file(f'{appdir}/start', start_script, perms=0o700)
@@ -215,7 +215,7 @@ def main():
     # stop script
     stop_script = textwrap.dedent(f'''\
                 #!/bin/bash
-                PATH={appdir}/node/bin:$PATH scl enable devtoolset-11 nodejs18 -- ghost stop -d {appdir}/ghost
+                PATH={appdir}/node/bin:$PATH scl enable devtoolset-11 nodejs20 -- ghost stop -d {appdir}/ghost
                 echo "Stopped Ghost for {appinfo["name"]}."
                 ''')
     create_file(f'{appdir}/stop', stop_script, perms=0o700)
@@ -274,7 +274,7 @@ def main():
     create_file(f'{appdir}/README', readme)
 
     # restart it
-    cmd = f'scl enable devtoolset-11 nodejs18 -- {appdir}/node/bin/ghost restart'
+    cmd = f'scl enable devtoolset-11 nodejs20 -- {appdir}/node/bin/ghost restart'
     doit = run_command(cmd, cwd=f'{appdir}/ghost')
 
     # finished, push a notice
