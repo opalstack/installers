@@ -181,16 +181,16 @@ else
     fi
 
     # use wp-cli to install wordpress,
-    /bin/php83 -d "memory_limit=256m" $HOME/bin/wp cli update --yes
-    /bin/php83 -d "memory_limit=256m" $HOME/bin/wp core download --path=/home/$USER/apps/$APPNAME
-    /bin/php83 -d "memory_limit=256m" $HOME/bin/wp core config --dbhost=localhost --dbname=$DBNAME --dbuser=$DBUSER --dbpass=$DBPWD --path=/home/$USER/apps/$APPNAME
+    /usr/bin/scl enable php83 -- php -d "memory_limit=256m" $HOME/bin/wp cli update --yes
+    /usr/bin/scl enable php83 -- php -d "memory_limit=256m" $HOME/bin/wp core download --path=/home/$USER/apps/$APPNAME
+    /usr/bin/scl enable php83 -- php -d "memory_limit=256m" $HOME/bin/wp core config --dbhost=localhost --dbname=$DBNAME --dbuser=$DBUSER --dbpass=$DBPWD --path=/home/$USER/apps/$APPNAME
     /usr/bin/chmod 644 wp-config.php
-    coreinstall=`$HOME/bin/wp core install --admin_name=$USER --admin_email=$accountemail --url="_" --title="Wordpress Blog" --path=/home/$USER/apps/$APPNAME`
+    coreinstall=`/usr/bin/scl enable php83 -- php -d "memory_limit=256m" $HOME/bin/wp core install --admin_name=$USER --admin_email=$accountemail --url="_" --title="Wordpress Blog" --path=/home/$USER/apps/$APPNAME`
     firstLine=`echo "${coreinstall}" | head -1`
     echo $firstLine
-    /bin/php83 -d "memory_limit=256m" $HOME/bin/wp option set default_comment_status closed --path=/home/$USER/apps/$APPNAME
-    # Send JSON installed OK.
-    /usr/bin/curl -s -X POST --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN" -d'[{"id": "'$UUID'"}]' $API_URL/api/v1/app/installed/
+    /usr/bin/scl enable php83 -- php -d "memory_limit=256m" $HOME/bin/wp option set default_comment_status closed --path=/home/$USER/apps/$APPNAME
+    /usr/bin/# Send JSON installed OK.
+    /usr/bin//usr/bin/curl -s -X POST --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN" -d'[{"id": "'$UUID'"}]' $API_URL/api/v1/app/installed/
     # Create notice
     /usr/bin/curl -s -X POST --header "Content-Type:application/json" --header "Authorization: Token $OPAL_TOKEN" -d'[{"type": "D", "content":"'"Created wordpress app $APPNAME with Admin user: $USER / $firstLine"'"}]' $API_URL/api/v1/notice/create/
 fi;
