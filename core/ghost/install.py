@@ -144,6 +144,7 @@ def main():
                         format='[%(asctime)s] %(levelname)s: %(message)s')
     # go!
     logging.info(f'Started installation of Ghost app {args.app_name}')
+    logging.info(args.opal_token)
     api = OpalstackAPITool(API_HOST, API_BASE_URI, args.opal_token, args.opal_user, args.opal_password)
     appinfo = api.get(f'/app/read/{args.app_uuid}')
     appdir = f'/home/{appinfo["osuser_name"]}/apps/{appinfo["name"]}'
@@ -151,7 +152,7 @@ def main():
     # install ghostcli
     cmd = f'mkdir -p {appdir}/node'
     doit = run_command(cmd)
-    cmd = f'scl enable devtoolset-11 nodejs20 -- npm install ghost-cli@latest --prefix={appdir}/node/'
+    cmd = f'scl enable devtoolset-11 nodejs20 -- npm install ghost-cli@1.29.3 --prefix={appdir}/node/'
     doit = run_command(cmd, cwd=f'{appdir}/node/')
     cmd = 'ln -s node_modules/.bin bin'
     doit = run_command(cmd, cwd=f'{appdir}/node/')
