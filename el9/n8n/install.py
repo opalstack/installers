@@ -299,15 +299,8 @@ def main():
     CMD_ENV["NODE_GYP_FORCE_PYTHON"] = "/usr/bin/python3"
     CMD_ENV["PYTHON"] = "/usr/bin/python3"
 
-    # Optional: mirror the forum step, but with the correct Python for EL9
-    cmd = (
-        "scl enable nodejs22 -- "
-        "npm config set python /usr/bin/python3"
-    )
-    run_command(cmd, cwd=projectdir)
-
     # Install n8n and deps using NodeJS 22 SCL
-    cmd = "scl enable nodejs22 -- npm install --build-from-source"
+    cmd = "scl enable nodejs22 -- env PYTHON=/usr/bin/python3 npm install --build-from-source"
     run_command(cmd, cwd=projectdir)
 
     # start script: daemonized, using working npm start, PID + log
