@@ -126,13 +126,16 @@ def gen_token(length=64):
     return secrets.token_hex(length // 2)
 
 
-def create_notice(api, app_uuid, token):
-    """Send a notice to the user with their Bearer token"""
+def create_notice(api, app_uuid, app_name, osuser_name, token):
+    """Send an app-scoped notice containing the VibeShell credentials."""
     notice_content = textwrap.dedent(f'''
         MCP VibeSHEL has been installed successfully!
 
-        Your Bearer Token (save this securely):
-        {token}
+        Application ID: {app_uuid}
+        Application Name: {app_name}
+        OS User: {osuser_name}
+        Config Path: /home/{osuser_name}/.mcp_vibeshell.ini
+        MCP Bearer Token: {token}
 
         Add this to your MCP client configuration:
         {{
@@ -380,7 +383,7 @@ def main():
     logging.info('Created README')
 
     # Step 5: Send notice with Bearer token
-    create_notice(api, args.app_uuid, token)
+    create_notice(api, args.app_uuid, appinfo['name'], osuser_name, token)
 
     # Mark app as installed
     payload = json.dumps([{'id': args.app_uuid}])
