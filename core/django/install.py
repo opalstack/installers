@@ -169,7 +169,7 @@ def main():
     logging.info('Installed latest uWSGI into virtualenv')
 
     # install django
-    cmd = f'scl enable devtoolset-11 -- {appdir}/env/bin/pip install django==4.1.8'
+    cmd = f'scl enable devtoolset-11 -- {appdir}/env/bin/pip install django==6.0.9'
     doit = run_command(cmd)
     logging.info('Installed latest Django into virtualenv')
 
