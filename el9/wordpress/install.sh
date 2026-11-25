@@ -183,7 +183,7 @@ else
     # use wp-cli to install wordpress,
     scl enable php85 -- php -d "memory_limit=256m" $HOME/bin/wp cli update --yes
     scl enable php85 -- php -d "memory_limit=256m" $HOME/bin/wp core download --path=/home/$USER/apps/$APPNAME --no-extract
-    tar zxf wp_*.tar.gz --strip 1
+    tar zxf w*.tar.gz --strip 1
     scl enable php85 -- php -d "memory_limit=256m" $HOME/bin/wp core config --dbhost=localhost --dbname=$DBNAME --dbuser=$DBUSER --dbpass=$DBPWD --path=/home/$USER/apps/$APPNAME
     /usr/bin/chmod 644 wp-config.php
     coreinstall=`scl enable php85 -- php -d "memory_limit=256m" $HOME/bin/wp core install --admin_name=$USER --admin_email=$accountemail --url="_" --title="Wordpress Blog" --path=/home/$USER/apps/$APPNAME`
